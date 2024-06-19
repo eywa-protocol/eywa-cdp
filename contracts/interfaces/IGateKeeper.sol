@@ -16,10 +16,13 @@ interface IGateKeeper {
         bytes calldata data,
         address to,
         uint64 chainIdTo,
-        address payToken
+        address payToken,
+        uint8 bridgeNumber,
+        uint256[][] memory valueToSpend,
+        bytes[] memory comission
     ) external payable;
 
     function getNonce() external view returns (uint256);
 
-    function bridge() external view returns (address);
+    function bridgeEywa() external view returns (address);
 }

@@ -8,11 +8,14 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "../utils/Typecast.sol";
 import "../utils/RequestIdLib.sol";
+import "../interfaces/IBridgeV3.sol";
 import "../interfaces/IBridgeV2.sol";
+import "../interfaces/IRouter.sol";
+import "../interfaces/IGateKeeper.sol";
+import "../interfaces/IAddressBook.sol";
 import "../interfaces/IValidatedDataReciever.sol";
 
-
-contract GateKeeper is AccessControlEnumerable, Typecast, ReentrancyGuard {
+contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, ReentrancyGuard {
     using Address for address;
 
     struct BaseFee {
@@ -37,40 +40,45 @@ contract GateKeeper is AccessControlEnumerable, Typecast, ReentrancyGuard {
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
 
     /// @dev bridge conract, can be changed any time
-    address public bridge;
+    address public bridgeEywa;
     /// @dev chainId => pay token => base fees
     mapping(uint64 => mapping(address => uint256)) public baseFees;
     /// @dev chainId => pay token => rate (per byte)
     mapping(uint64 => mapping(address => uint256)) public rates;
     /// @dev caller => discounts, [0, 10000]
     mapping(address => uint256) public discounts;
-    /// @dev treasury address
+
+    // @dev brdige => priority, 1 higher than 10, 0 priority turns off the bridge
+    mapping(address => uint8) public bridgePriorities;   
+    // @dev rigistered bridges
+    address[] public bridges;
+    // @dev treasury for native value
     address public treasury;
 
+    
     event CrossChainCallPaid(address indexed sender, address indexed token, uint256 transactionCost);
     event BridgeSet(address bridge);
     event BaseFeeSet(uint64 chainId, address payToken, uint256 fee);
     event RateSet(uint64 chainId, address payToken, uint256 rate);
     event DiscountSet(address caller, uint256 discount);
     event FeesWithdrawn(address token, uint256 amount, address to);
+    event PrioritySet(address bridge, uint8 priority);
     event TreasurySet(address treasury);
 
-    /**
-     * @dev Constructor function for GateKeeper contract.
-     *
-     * @param bridge_ The address of the BridgeV2 contract.
-     */
-    constructor(address bridge_) {
+
+    constructor(address bridgeEYWA_, address treasury_) {
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
-        require(bridge_ != address(0), "GateKeeper: zero address");
-        bridge = bridge_;
+        require(bridgeEYWA_ != address(0), "GateKeeper: zero address");
+        require(treasury_ != address(0), "GateKeeper: zero address");
+        bridgeEywa = bridgeEYWA_;
+        treasury = treasury_;
     }
 
     /**
      * @dev Returns same nonce as bridge (on request from same sender).
      */
     function getNonce() external view returns (uint256 nonce) {
-        nonce = IBridgeV2(bridge).nonces(msg.sender);
+        nonce = IBridgeV2(bridgeEywa).nonces(msg.sender);
     }
 
     /**
@@ -82,21 +90,8 @@ contract GateKeeper is AccessControlEnumerable, Typecast, ReentrancyGuard {
      */
     function setBridge(address bridge_) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(bridge_ != address(0), "GateKeeper: zero address");
-        bridge = bridge_;
-        emit BridgeSet(bridge);
-    }
-
-    /**
-     * @notice Sets the address of the treasury contract.
-     *
-     * @dev Only the contract owner is allowed to call this function.
-     *
-     * @param treasury_ the address of the new BridgeV2 contract to be set.
-     */
-    function setTreasury(address treasury_) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(treasury_ != address(0), "GateKeeper: zero address");
-        treasury = treasury_;
-        emit TreasurySet(bridge);
+        bridgeEywa = bridge_;
+        emit BridgeSet(bridgeEywa);
     }
 
     /**
@@ -183,17 +178,71 @@ contract GateKeeper is AccessControlEnumerable, Typecast, ReentrancyGuard {
      * withdraw native asset.
      *
      * @param token The token address from which the fees need to be withdrawn;
-     * @param amount The amount of fees to be withdrawn.
+     * @param amount The amount of fees to be withdrawn;
+     * @param to The address where the fees will be transferred.
      */
-    function withdrawFees(address token, uint256 amount) external onlyRole(OPERATOR_ROLE) nonReentrant {
-        require(treasury != address(0), "GateKeeper: treasury not set");
+    function withdrawFees(address token, uint256 amount, address to) external onlyRole(OPERATOR_ROLE) nonReentrant {
         if (token == address(0)) {
-            (bool sent,) = treasury.call{value: amount}("");
+            (bool sent,) = to.call{value: amount}("");
             require(sent, "GateKeeper: failed to send Ether");
         } else {
-            SafeERC20.safeTransfer(IERC20(token), treasury, amount);
+            SafeERC20.safeTransfer(IERC20(token), to, amount);
         }
-        emit FeesWithdrawn(token, amount, treasury);
+        emit FeesWithdrawn(token, amount, to);
+    }
+
+    function bytes32ToString(bytes32 _bytes32) public pure returns (string memory) {
+        uint8 i = 0;
+        while(i < 32 && _bytes32[i] != 0) {
+            i++;
+        }
+        bytes memory bytesArray = new bytes(i);
+        for (i = 0; i < 32 && _bytes32[i] != 0; i++) {
+            bytesArray[i] = _bytes32[i];
+        }
+        return string(bytesArray);
+    }
+
+    // if priority = 0, bridge disabled
+    function setPriority(address bridge, uint8 priority) external onlyRole(OPERATOR_ROLE) {
+        require(bridge != address(0), "GateKeeper: zero address");
+        bridgePriorities[bridge] = priority;
+        emit PrioritySet(bridge, priority);
+    }
+
+    function setTreasury(address treasury_) external onlyRole(OPERATOR_ROLE) {
+        require(treasury_ != address(0), "GateKeeper: zero address");
+        treasury = treasury_;
+        emit TreasurySet(treasury_);
+    }
+
+    function registerBridge(address bridge, uint8 priority) external onlyRole(OPERATOR_ROLE) {
+        require(bridge != address(0), "GateKeeper: zero address");
+        require(bridgePriorities[bridge] == 0, "GateKeeper: bridge already registered");
+        bridgePriorities[bridge] = priority;
+        bridges.push(bridge);
+    }
+
+    function _selectBridgesByPriority(uint8 bridgeNumber) private view returns (address[] memory) {
+        address[] memory selectedBridges = new address[](bridgeNumber);
+        if (bridgeNumber == 0) return selectedBridges;
+        address[] memory tempBridges = bridges;
+        uint8 highestPriority = 255;
+        uint8 highestPriorityIndex;
+        uint256 tempBridgesLength = tempBridges.length;
+        for (uint8 i; i < bridgeNumber; ++i) {
+            for (uint8 j; j < tempBridgesLength; ++j) {
+                if (bridgePriorities[tempBridges[j]] != 0 && highestPriority > bridgePriorities[tempBridges[j]]) {
+                    highestPriority = bridgePriorities[tempBridges[j]];
+                    highestPriorityIndex = j;
+                }
+            }
+            selectedBridges[i] = tempBridges[highestPriorityIndex];
+            highestPriority = 255;
+            tempBridges[highestPriorityIndex] = address(0);
+        }
+        require(selectedBridges.length == bridgeNumber, "GateKeeper: not enough bridges");
+        return selectedBridges;
     }
 
     /**
@@ -208,58 +257,123 @@ contract GateKeeper is AccessControlEnumerable, Typecast, ReentrancyGuard {
      * @param to The address of the destination contract;
      * @param chainIdTo The ID of the chain where the destination contract resides;
      * @param payToken The address of the ERC20 token used to pay the fee or address(0) if Ether is used.
+     * @param bridgeNumber Number of bridges through which data will be transferred.
+     * @param valuesToSpend  value [ [AxelarValueHUB, LZValueHUB], [AxelarValueSOURCE, LZValueSOURCE] ]
+     * @param comissionLZ  comission [LZCommissionHUB, LZCommissionSOURCE]
      */
     function sendData(
         bytes calldata data,
         address to,
         uint64 chainIdTo,
-        address payToken
+        address payToken,
+        uint8 bridgeNumber,
+        uint256[][] memory valuesToSpend,
+        bytes[] memory comissionLZ
     ) external payable nonReentrant {
-        uint256 amountToPay = calculateCost(payToken, data.length, chainIdTo, msg.sender);
-        _proceedCrosschainFees(payToken, amountToPay);
 
-        uint256 nonce = IBridgeV2(bridge).nonces(msg.sender);
-        bytes32 requestId = RequestIdLib.prepareRequestId(
-            castToBytes32(to),
-            chainIdTo,
-            castToBytes32(msg.sender),
-            block.chainid,
-            nonce
-        );
+        payable(treasury).transfer(msg.value);
+        
+        bytes32 dataHash;
+        {
+            uint256 amountToPayEywa = calculateCost(payToken, data.length, chainIdTo, msg.sender);
+            _proceedCrosschainFees(payToken, amountToPayEywa, valuesToSpend);
 
-        bytes memory info = abi.encodeWithSelector(
-            IValidatedDataReciever.receiveValidatedData.selector,
-            bytes4(data[:4]),
-            msg.sender,
-            block.chainid
-        );
+            uint256 nonce = IBridgeV2(bridgeEywa).nonces(msg.sender);
+            bytes32 requestId = RequestIdLib.prepareRequestId(
+                castToBytes32(to),
+                chainIdTo,
+                castToBytes32(msg.sender),
+                block.chainid,
+                nonce
+            );
+            bytes memory info = abi.encodeWithSelector(
+                IValidatedDataReciever.receiveValidatedData.selector,
+                bytes4(data[:4]),
+                msg.sender,
+                block.chainid
+            );
+            bytes memory out = abi.encode(data, info, _popValues(valuesToSpend), _popCommissions(comissionLZ));
 
-        bytes memory out = abi.encode(data, info);
+            IBridgeV2(bridgeEywa).sendV2(
+                IBridgeV2.SendParams({
+                    requestId: requestId,
+                    data: out,
+                    to: to,
+                    chainIdTo: chainIdTo
+                }),
+                msg.sender,
+                nonce
+            );
+            dataHash = keccak256(abi.encode(requestId, out, to, chainIdTo));
+        }
+        _sendHash(bridgeNumber, dataHash, chainIdTo, to, valuesToSpend, comissionLZ);
+    }
 
-        IBridgeV2(bridge).sendV2(
-            IBridgeV2.SendParams({
-                requestId: requestId,
-                data: out,
-                to: to,
-                chainIdTo: chainIdTo
-            }),
-            msg.sender,
-            nonce
-        );
+    function _sendHash(
+        uint8 bridgeNumber,
+        bytes32 dataHash,
+        uint64 chainIdTo,
+        address toCall,
+        uint256[][] memory valuesToSpend,
+        bytes[] memory comissionLZ
+    ) internal {
+        address[] memory selectedBridges = _selectBridgesByPriority(bridgeNumber - 1);
+        uint8 selectedBridgesLength = uint8(selectedBridges.length);
+
+        // TODO what if msg.sender isn't router? P.S. It must be our router, because gateKeeper.sendData gives
+        // access to HUB treasury
+        address addressBook = IRouter(msg.sender).addressBook();
+        for (uint8 i; i < selectedBridgesLength; ++i) {
+            address sourceBridge = IAddressBook(addressBook).getDestinationBridge(selectedBridges[i], chainIdTo);
+            IBridgeV3(selectedBridges[i]).send(
+                dataHash,
+                sourceBridge,
+                chainIdTo,
+                toCall,
+                valuesToSpend,
+                comissionLZ
+            );
+        }
+    }
+
+    function _popValues(uint256[][] memory values) internal pure returns(uint256[][] memory newValues) {
+        uint256 valuesLength = values.length;
+        if (valuesLength < 2) return newValues;
+        newValues = new uint256[][](valuesLength - 1);
+        for (uint8 i; i < valuesLength - 1; ++i) {
+            newValues[i] = values[i];
+        }
+    }
+
+    function _popCommissions(bytes[] memory commissions) internal pure returns(bytes[] memory newCommissions) {
+        uint256 commissionsLength = commissions.length;
+        if (commissionsLength < 2) return newCommissions;
+
+        newCommissions = new bytes[](commissionsLength - 1);
+        for (uint8 i; i < commissionsLength - 1; ++i) {
+            newCommissions[i] = commissions[i];
+        }
     }
 
     /**
      * @notice Proceeds with cross-chain fees payment in the specified token.
      *
      * @param payToken The address of the token to be used for fee payment.
-     * @param transactionCost The amount of fees to be paid for the cross-chain operation.
+     * @param transactionCostEywa The amount of fees to be paid for the cross-chain operation.
+     * @param valuesToSpend Value that can spend each bridge.
      */
-    function _proceedCrosschainFees(address payToken, uint256 transactionCost) private {
-        emit CrossChainCallPaid(msg.sender, payToken, transactionCost);
+    function _proceedCrosschainFees(address payToken, uint256 transactionCostEywa, uint256[][] memory valuesToSpend) private {
+        uint256 lastIndex = valuesToSpend.length - 1;
+        uint256 transactionCostLZ = valuesToSpend[lastIndex][1];
+        uint256 transactionCostAxelar = valuesToSpend[lastIndex][0];
+
+        uint256 totalCost = transactionCostEywa + transactionCostLZ + transactionCostAxelar;
+        emit CrossChainCallPaid(msg.sender, payToken, totalCost);
         if (payToken == address(0)) {
-            require(msg.value >= transactionCost, "GateKeeper: invalid payment amount");
+            require(msg.value >= totalCost, "GateKeeper: invalid payment amount");
         } else {
-            SafeERC20.safeTransferFrom(IERC20(payToken), msg.sender, address(this), transactionCost);
+            SafeERC20.safeTransferFrom(IERC20(payToken), msg.sender, address(this), totalCost);
         }
     }
+
 }

@@ -1,0 +1,16 @@
+// SPDX-License-Identifier: UNLICENSED
+// Copyright (c) Eywa.Fi, 2021-2023 - all rights reserved
+pragma solidity ^0.8.17;
+
+interface IBridgeLZ {
+
+    function sendFromTreasury(
+        bytes32 data,
+        address toReceive,
+        uint256 chainIdTo,
+        address toCall,
+        uint256[][] memory valueToSpend,
+        bytes[] memory comissionLZ
+    ) external payable returns (bool);
+
+}
