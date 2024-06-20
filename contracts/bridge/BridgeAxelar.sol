@@ -12,7 +12,6 @@ import { AxelarExpressExecutable } from '@axelar-network/axelar-gmp-sdk-solidity
 import { IAxelarGateway } from '@axelar-network/axelar-gmp-sdk-solidity/contracts/interfaces/IAxelarGateway.sol';
 import { IAxelarGasService } from '@axelar-network/axelar-gmp-sdk-solidity/contracts/interfaces/IAxelarGasService.sol';
 import "@openzeppelin/contracts/utils/Strings.sol";
-import "../interfaces/IRouter.sol";
 import "../interfaces/INativeTreasury.sol";
 
 contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, AccessControlEnumerable, ReentrancyGuard {
@@ -73,7 +72,7 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, AccessControlEnumer
     }
 
     function send(
-        bytes32 data,
+        bytes memory data,
         address toSend,
         uint256 chainIdTo,
         address toCall,
@@ -84,7 +83,7 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, AccessControlEnumer
     }
 
     function _send(
-        bytes32 data,
+        bytes memory data,
         address toSend,
         uint256 chainIdTo,
         address toCall,
@@ -116,20 +115,5 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, AccessControlEnumer
             destinationAddress,
             sendData
         );
-    }
-
-    function _execute(
-        string calldata sourceChain,
-        string calldata sourceAddress,
-        bytes calldata payload_
-    ) internal override {
-
-        // TODO anyone can call it, make checks of sourceChain and source address
-        require(state != State.Inactive, "Bridge: state inactive");
-        (
-            bytes32 data_, 
-            address toCall_
-        ) = abi.decode(payload_, (bytes32, address));
-        IRouter(toCall_).saveReceivedHash(data_);
     }
 }

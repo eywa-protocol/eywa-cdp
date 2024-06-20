@@ -5,13 +5,12 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "./interfaces/IBridgeV3.sol";
-import "./interfaces/IBridgeLZ.sol";
-import "./interfaces/IRouter.sol";
-import "./interfaces/INativeTreasury.sol";
-import { OApp, Origin, MessagingFee } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OApp.sol";
+import "../interfaces/IBridgeV3.sol";
+import "../interfaces/IBridgeLZ.sol";
+import "../interfaces/INativeTreasury.sol";
+import { OAppSender, OAppCore, Origin, MessagingFee } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OApp.sol";
 
-contract BridgeLZ is OApp, IBridgeV3, IBridgeLZ, AccessControlEnumerable, ReentrancyGuard {
+contract BridgeLZ is OAppSender, IBridgeV3, IBridgeLZ, AccessControlEnumerable, ReentrancyGuard {
     
     using Address for address;
     
@@ -35,7 +34,7 @@ contract BridgeLZ is OApp, IBridgeV3, IBridgeLZ, AccessControlEnumerable, Reentr
     event StateSet(State state);
     event TreasurySet(address treasury);
 
-    constructor(address _endpoint, address _owner) OApp(_endpoint, _owner) {
+    constructor(address _endpoint, address _owner) OAppCore(_endpoint, _owner) {
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
         version = "2.2.3";
         state = State.Active;
@@ -70,7 +69,7 @@ contract BridgeLZ is OApp, IBridgeV3, IBridgeLZ, AccessControlEnumerable, Reentr
     }
 
     function send(
-        bytes32 data,
+        bytes memory data,
         address toSend,
         uint256 chainIdTo,
         address toCall,
@@ -97,7 +96,7 @@ contract BridgeLZ is OApp, IBridgeV3, IBridgeLZ, AccessControlEnumerable, Reentr
     }
 
     function sendFromTreasury(
-        bytes32 data,
+        bytes memory data,
         address toSend,
         uint256 chainIdTo,
         address toCall,
@@ -108,7 +107,7 @@ contract BridgeLZ is OApp, IBridgeV3, IBridgeLZ, AccessControlEnumerable, Reentr
     }
 
     function _send(
-        bytes32 data,
+        bytes memory data,
         address toSend,
         uint256 chainIdTo,
         address toCall,
@@ -143,20 +142,4 @@ contract BridgeLZ is OApp, IBridgeV3, IBridgeLZ, AccessControlEnumerable, Reentr
         fee = _quote(_dstEid, _data, _options, _payInLzToken);
     }
 
-    function _lzReceive(
-        Origin calldata origin_,
-        bytes32 guid_,
-        bytes calldata message_,
-        address executor_,
-        bytes calldata extraData_
-    ) internal override {
-
-        // TODO anyone can call it, make checks of source сhain and source address
-        require(state != State.Inactive, "Bridge: state inactive");
-        (
-            bytes32 data_, 
-            address toCall_
-        ) = abi.decode(message_, (bytes32, address));
-        IRouter(toCall_).saveReceivedHash(data_);
-    }
 }

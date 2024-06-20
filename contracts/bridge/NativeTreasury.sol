@@ -19,7 +19,7 @@ contract NativeTreasury is INativeTreasury, AccessControlEnumerable  {
     
     function callFromTreasury(
         uint256 value_,
-        bytes32 data,
+        bytes memory data,
         address toSend,
         uint256 chainIdTo,
         address toCall,

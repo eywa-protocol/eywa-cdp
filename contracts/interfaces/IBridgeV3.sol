@@ -12,7 +12,7 @@ interface IBridgeV3 {
 
 
     function send(
-        bytes32 data,
+        bytes memory data,
         address toReceive,
         uint256 chainIdTo,
         address toCall,

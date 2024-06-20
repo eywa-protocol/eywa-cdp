@@ -306,12 +306,12 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
             );
             dataHash = keccak256(abi.encode(requestId, out, to, chainIdTo));
         }
-        _sendHash(bridgeNumber, dataHash, chainIdTo, to, valuesToSpend, comissionLZ);
+        _sendHash(bridgeNumber, abi.encode(dataHash), chainIdTo, to, valuesToSpend, comissionLZ);
     }
 
     function _sendHash(
         uint8 bridgeNumber,
-        bytes32 dataHash,
+        bytes memory dataHash,
         uint64 chainIdTo,
         address toCall,
         uint256[][] memory valuesToSpend,

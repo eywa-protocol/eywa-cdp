@@ -5,7 +5,7 @@ pragma solidity ^0.8.17;
 interface INativeTreasury {
     function callFromTreasury(
         uint256 value_,
-        bytes32 data,
+        bytes memory data,
         address toSend,
         uint256 chainIdTo,
         address toCall,

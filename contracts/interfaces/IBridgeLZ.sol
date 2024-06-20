@@ -5,7 +5,7 @@ pragma solidity ^0.8.17;
 interface IBridgeLZ {
 
     function sendFromTreasury(
-        bytes32 data,
+        bytes memory data,
         address toReceive,
         uint256 chainIdTo,
         address toCall,
