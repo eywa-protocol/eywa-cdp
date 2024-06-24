@@ -7,7 +7,7 @@ interface INativeTreasury {
         uint256 value_,
         bytes memory data,
         address toSend,
-        uint256 chainIdTo,
+        uint64 chainIdTo,
         address toCall,
         uint256[][] memory valueToSpend,
         bytes[] memory comissionLZ

@@ -7,10 +7,12 @@ interface IBridgeLZ {
     function sendFromTreasury(
         bytes memory data,
         address toReceive,
-        uint256 chainIdTo,
+        uint64 chainIdTo,
         address toCall,
         uint256[][] memory valueToSpend,
         bytes[] memory comissionLZ
     ) external payable returns (bool);
+
+    function chainIds(uint32) external returns(uint64);
 
 }

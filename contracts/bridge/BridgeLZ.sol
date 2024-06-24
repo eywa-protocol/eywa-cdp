@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "../interfaces/IBridgeV3.sol";
+import "../interfaces/IBridgeV2.sol";
 import "../interfaces/IBridgeLZ.sol";
 import "../interfaces/INativeTreasury.sol";
 import { OAppSender, OAppCore, Origin, MessagingFee } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OApp.sol";
@@ -18,28 +19,36 @@ contract BridgeLZ is OAppSender, IBridgeV3, IBridgeLZ, AccessControlEnumerable, 
     bytes32 public constant GATEKEEPER_ROLE = keccak256("GATEKEEPER_ROLE");
     /// @dev operator role id
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
+    /// @dev treasury role id
     bytes32 public constant TREASURY_ROLE = keccak256("TREASURY_ROLE");
-    /// @dev human readable version
-    string public version;
     /// @dev current state Active\Inactive
-    State public state;
+    IBridgeV2.State public state;
     /// @dev nonces
     mapping(address => uint256) public nonces;
-
     /// @dev chainIdTo => dstEid
-    mapping(uint256 => uint32) public dstEids;
-
+    mapping(uint64 => uint32) public dstEids;
+    /// @dev dstEid => chainIdTo
+    mapping(uint32 => uint64) public chainIds;
+    /// @dev native treasury address
     address public treasury;
 
-    event StateSet(State state);
+    event StateSet(IBridgeV2.State state);
     event TreasurySet(address treasury);
+    event DstEidSet(uint256 chainIdTo, uint32 dstEid);
 
     constructor(address _endpoint, address _owner) OAppCore(_endpoint, _owner) {
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
-        version = "2.2.3";
-        state = State.Active;
+        state = IBridgeV2.State.Active;
     }
 
+    /**
+     * @dev Set peer for OApp
+     * 
+     * Required to be set for each EID
+     * 
+     * @param _eid Eid of chain
+     * @param _peer Destination OApp contract address in bytes32 format
+     */
     function setPeer(uint32 _eid, bytes32 _peer) public override onlyOwner {
         peers[_eid] = _peer;
         emit PeerSet(_eid, _peer);
@@ -52,76 +61,123 @@ contract BridgeLZ is OAppSender, IBridgeV3, IBridgeLZ, AccessControlEnumerable, 
      *
      * @param state_ Active\Inactive state
      */
-    function setState(State state_) external onlyRole(OPERATOR_ROLE) {
+    function setState(IBridgeV2.State state_) external onlyRole(OPERATOR_ROLE) {
         state = state_;
         emit StateSet(state);
     }
 
+    /**
+     * @dev Set new treasury.
+     *
+     * Controlled by operator.
+     *
+     * @param treasury_ New treasury address
+     */
     function setTreasury(address treasury_) external onlyRole(OPERATOR_ROLE) {
-        require(treasury_ != address(0), "GateKeeper: zero address");
+        require(treasury_ != address(0), "BridgeLZ: zero address");
         treasury = treasury_;
         emit TreasurySet(treasury_);
     }
 
-    function setDstEids(uint256 chainIdTo_, uint32 dstEid_) external onlyRole(OPERATOR_ROLE) {
+    /**
+     * @dev Set dstEid for chainId
+     * 
+     * @param chainIdTo_ Chain ID to send
+     * @param dstEid_ DstEid of chain
+     */
+    function setDstEids(uint64 chainIdTo_, uint32 dstEid_) external onlyRole(OPERATOR_ROLE) {
+        require(chainIdTo_ != 0, "BridgeLZ: zero amount");
+        require(dstEid_ != 0, "BridgeLZ: zero amount");
         dstEids[chainIdTo_] = dstEid_;
-        // emit StateSet(state);
+        chainIds[dstEid_] = chainIdTo_;
+        emit DstEidSet(chainIdTo_, dstEid_);
     }
 
+    /**
+     * @dev Send data to receiver in chainIdTo
+     * 
+     * Calls _send directrly or through treasury, if msg.value needed
+     * 
+     * @param data  data, which will be sent
+     * @param receiver destination receiver address
+     * @param chainIdTo  destination chain id 
+     * @param destinationExecutor destination executor address
+     * @param spentValue value which will be spent for lz delivery
+     * @param commissionLZ gas and eth value for destination execution
+     */
     function send(
         bytes memory data,
-        address toSend,
-        uint256 chainIdTo,
-        address toCall,
-        uint256[][] memory valueToSpend,
-        bytes[] memory comissionLZ
+        address receiver,
+        uint64 chainIdTo,
+        address destinationExecutor,
+        uint256[][] memory spentValue,
+        bytes[] memory commissionLZ
     ) public payable override onlyRole(GATEKEEPER_ROLE) returns (bool) {
         if (msg.value > 0) {
-            _send(data, toSend, chainIdTo, toCall, valueToSpend, comissionLZ);
+            _send(data, receiver, chainIdTo, destinationExecutor, spentValue, commissionLZ);
         } else {
 
-            uint256 valuesLength = valueToSpend.length;
-            uint256 valueLZ = valueToSpend[valuesLength - 1][1];
+            uint256 valuesLength = spentValue.length;
+            uint256 valueLZ = spentValue[valuesLength - 1][1];
 
             INativeTreasury(treasury).callFromTreasury(
                 valueLZ,
                 data,
-                toSend,
+                receiver,
                 chainIdTo,
-                toCall,
-                valueToSpend,
-                comissionLZ
+                destinationExecutor,
+                spentValue,
+                commissionLZ
             );
         }
     }
-
+    /**
+     * @dev Call _send from treasury adress with msg.value
+     * 
+     * @param data data, which will be sent
+     * @param receiver destination receiver address
+     * @param chainIdTo destination chain id 
+     * @param destinationExecutor destination executor address
+     * @param spentValue value which will be spent for lz delivery
+     * @param commissionLZ gas and eth value for destination execution
+     */
     function sendFromTreasury(
         bytes memory data,
-        address toSend,
-        uint256 chainIdTo,
-        address toCall,
-        uint256[][] memory valueToSpend,
-        bytes[] memory comissionLZ
+        address receiver,
+        uint64 chainIdTo,
+        address destinationExecutor,
+        uint256[][] memory spentValue,
+        bytes[] memory commissionLZ
     ) public payable onlyRole(TREASURY_ROLE) returns (bool) {
-        _send(data, toSend, chainIdTo, toCall, valueToSpend, comissionLZ);
+        _send(data, receiver, chainIdTo, destinationExecutor, spentValue, commissionLZ);
     }
 
+    /**
+     * @dev Send data to receiver in chainIdTo
+     * 
+     * @param data  data, which will be sent
+     * @param receiver destination receiver address
+     * @param chainIdTo  destination chain id 
+     * @param destinationExecutor destination executor address
+     * @param spentValue value which will be spent for lz delivery
+     * @param commissionLZ gas and eth value for destination execution
+     */
     function _send(
         bytes memory data,
-        address toSend,
-        uint256 chainIdTo,
-        address toCall,
-        uint256[][] memory valueToSpend,
+        address receiver,
+        uint64 chainIdTo,
+        address destinationExecutor,
+        uint256[][] memory spentValue,
         bytes[] memory commissionLZ
     ) internal returns (bool) {
-        require(state == State.Active, "Bridge: state inactive");
+        require(state == IBridgeV2.State.Active, "Bridge: state inactive");
 
-        uint256 valuesLength = valueToSpend.length;
-        uint256 valueLZ = valueToSpend[valuesLength - 1][1];
+        uint256 valuesLength = spentValue.length;
+        uint256 valueLZ = spentValue[valuesLength - 1][1];
 
         bytes memory commission = commissionLZ[valuesLength - 1];
 
-        bytes memory sendData = abi.encode(data, toCall);
+        bytes memory sendData = abi.encode(data, destinationExecutor);
 
         _lzSend(
             dstEids[chainIdTo],
@@ -141,5 +197,4 @@ contract BridgeLZ is OAppSender, IBridgeV3, IBridgeLZ, AccessControlEnumerable, 
         
         fee = _quote(_dstEid, _data, _options, _payInLzToken);
     }
-
 }

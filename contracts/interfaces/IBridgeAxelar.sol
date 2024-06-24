@@ -2,9 +2,8 @@
 // Copyright (c) Eywa.Fi, 2021-2023 - all rights reserved
 pragma solidity ^0.8.17;
 
-interface IReceiver {
+interface IBridgeAxelar {
 
-    function receiveData(
-        bytes memory receivedData
-    ) external;
+    function chainIds(string memory) external returns(uint64);
+
 }
