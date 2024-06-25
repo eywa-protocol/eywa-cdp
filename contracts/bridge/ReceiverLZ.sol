@@ -38,7 +38,7 @@ contract ReceiverLZ is OAppReceiver {
             IAddressBook(addressBook).router(chainIdFrom) == address(uint160(uint256(origin_.sender))),
             "ReceiverLZ: wrong sender"
         );
-        (bytes memory data_, address toCall_) = abi.decode(message_, (bytes, address));
-        IReceiver(toCall_).receiveData(data_);
+        address receiver = IAddressBook(addressBook).receiver();
+        IReceiver(receiver).receiveData(message_);
     }
 }

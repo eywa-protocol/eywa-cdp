@@ -149,4 +149,8 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, IBridgeAxelar, Acce
             sendData
         );
     }
+
+    receive() external payable {
+
+    }
 }

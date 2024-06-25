@@ -8,4 +8,5 @@ interface IAddressBook {
 
     function router(uint64 chainId) external returns(address);
     function gateKeeper() external returns(address);
+    function receiver() external returns(address);
 }

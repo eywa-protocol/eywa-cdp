@@ -33,8 +33,8 @@ contract ReceiverAxelar is AxelarExpressExecutable {
             keccak256(abi.encode(Strings.toHexString(router))) == keccak256(abi.encode(sourceAddress)),
             "ReceiverAxelar: wrong sender"
         );
-        (bytes memory data_, address toCall_) = abi.decode(payload_, (bytes, address));
-        IReceiver(toCall_).receiveData(data_);
+        address receiver = IAddressBook(addressBook).receiver();
+        IReceiver(receiver).receiveData(payload_);
     }
 
     function _convertStringToAddress(string memory str) private returns(address) {

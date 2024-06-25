@@ -20,13 +20,13 @@ contract NativeTreasury is INativeTreasury, AccessControlEnumerable  {
     function callFromTreasury(
         uint256 value_,
         bytes memory data,
-        address toSend,
+        address receiver,
         uint64 chainIdTo,
-        address toCall,
+        address executor,
         uint256[][] memory valueToSpend,
         bytes[] memory comissionLZ
     ) external onlyRole(BRIDGE_ROLE) {
-        IBridgeLZ(msg.sender).sendFromTreasury{value: value_}(data, toSend, chainIdTo, toCall, valueToSpend, comissionLZ);
+        IBridgeLZ(msg.sender).sendFromTreasury{value: value_}(data, receiver, chainIdTo, executor, valueToSpend, comissionLZ);
     }
 
     function getValue(uint256 value_) external onlyRole(BRIDGE_ROLE) {

@@ -10,7 +10,6 @@ import "../interfaces/IBridgeV2.sol";
 import "../interfaces/IBridgeLZ.sol";
 import "../interfaces/INativeTreasury.sol";
 import { OAppSender, OAppCore, Origin, MessagingFee } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OApp.sol";
-
 contract BridgeLZ is OAppSender, IBridgeV3, IBridgeLZ, AccessControlEnumerable, ReentrancyGuard {
     
     using Address for address;
@@ -49,7 +48,7 @@ contract BridgeLZ is OAppSender, IBridgeV3, IBridgeLZ, AccessControlEnumerable, 
      * @param _eid Eid of chain
      * @param _peer Destination OApp contract address in bytes32 format
      */
-    function setPeer(uint32 _eid, bytes32 _peer) public override onlyOwner {
+    function setPeer(uint32 _eid, bytes32 _peer) public override onlyRole(OPERATOR_ROLE) {
         peers[_eid] = _peer;
         emit PeerSet(_eid, _peer);
     }
@@ -178,7 +177,6 @@ contract BridgeLZ is OAppSender, IBridgeV3, IBridgeLZ, AccessControlEnumerable, 
         bytes memory commission = commissionLZ[valuesLength - 1];
 
         bytes memory sendData = abi.encode(data, destinationExecutor);
-
         _lzSend(
             dstEids[chainIdTo],
             sendData,
@@ -194,7 +192,6 @@ contract BridgeLZ is OAppSender, IBridgeV3, IBridgeLZ, AccessControlEnumerable, 
         bytes memory _options,
         bool _payInLzToken
     ) public view returns (MessagingFee memory fee) {
-        
         fee = _quote(_dstEid, _data, _options, _payInLzToken);
     }
 }
