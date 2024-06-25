@@ -36,20 +36,21 @@ contract Receiver is IReceiver, AccessControlEnumerable {
     }
 
     function receiveData(bytes memory receivedData) external onlyRole(BRIDGE_ROLE) {
-        if (receivedData.length == 32) {
-            if (mainData[bytes32(receivedData)].length != 0) {
-                _call(mainData[bytes32(receivedData)]);
-            }
-            else {
-                receivedHashes[bytes32(receivedData)]++;
-            }
+        bytes32 hash_ = keccak256(receivedData);
+        if (receivedHashes[hash_] >= threshold - 1) {
+            _call(receivedData);
         } else {
-            bytes32 hash_ = keccak256(receivedData);
-            if (receivedHashes[hash_] >= threshold - 1) {
-                _call(receivedData);
-            } else {
-                mainData[hash_] = receivedData;
-            }
+            mainData[hash_] = receivedData;
+        }
+        
+    }
+
+    function receiveHashData(bytes memory receivedData) external onlyRole(BRIDGE_ROLE) {
+        if (mainData[bytes32(receivedData)].length != 0) {
+            _call(mainData[bytes32(receivedData)]);
+        }
+        else {
+            receivedHashes[bytes32(receivedData)]++;
         }
     }
 

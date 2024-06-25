@@ -34,7 +34,13 @@ contract ReceiverAxelar is AxelarExpressExecutable {
             "ReceiverAxelar: wrong sender"
         );
         address receiver = IAddressBook(addressBook).receiver();
-        IReceiver(receiver).receiveData(payload_);
+        (bytes memory payload, bool isHash) = abi.decode(payload_, (bytes, bool));
+        if (isHash){
+            IReceiver(receiver).receiveHashData(payload);
+
+        } else {
+            IReceiver(receiver).receiveData(payload);
+        }
     }
 
     function _convertStringToAddress(string memory str) private returns(address) {

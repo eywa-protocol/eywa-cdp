@@ -39,6 +39,12 @@ contract ReceiverLZ is OAppReceiver {
             "ReceiverLZ: wrong sender"
         );
         address receiver = IAddressBook(addressBook).receiver();
-        IReceiver(receiver).receiveData(message_);
+        (bytes memory payload, bool isHash) = abi.decode(message_, (bytes, bool));
+        if (isHash){
+            IReceiver(receiver).receiveHashData(payload);
+
+        } else {
+            IReceiver(receiver).receiveData(payload);
+        }
     }
 }

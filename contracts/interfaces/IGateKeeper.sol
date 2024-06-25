@@ -17,8 +17,7 @@ interface IGateKeeper {
         address to,
         uint64 chainIdTo,
         address payToken,
-        uint8 bridgeNumber,
-        uint256[][] memory valueToSpend,
+        uint256[][] memory spentValue,
         bytes[] memory comission
     ) external payable;
 

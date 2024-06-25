@@ -4,7 +4,7 @@ pragma solidity ^0.8.17;
 
 interface IAddressBook {
 
-    function getDestinationBridge(address sourceBridge_, uint64 chainIdTo) external returns(address);
+    function getDestinationReceiver(address sourceBridge_, uint64 chainIdTo) external returns(address);
 
     function router(uint64 chainId) external returns(address);
     function gateKeeper() external returns(address);

@@ -54,6 +54,11 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     address[] public bridges;
     // @dev treasury for native value
     address public treasury;
+    
+    address public addressBook;
+
+    uint8 bridgeNumber = 2;
+    
 
     
     event CrossChainCallPaid(address indexed sender, address indexed token, uint256 transactionCost);
@@ -66,12 +71,14 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     event TreasurySet(address treasury);
 
 
-    constructor(address bridgeEYWA_, address treasury_) {
+    constructor(address bridgeEYWA_, address treasury_, address addressBook_) {
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
         require(bridgeEYWA_ != address(0), "GateKeeper: zero address");
         require(treasury_ != address(0), "GateKeeper: zero address");
+        require(addressBook_ != address(0), "GateKeeper: zero address");
         bridgeEywa = bridgeEYWA_;
         treasury = treasury_;
+        addressBook = addressBook_;
     }
 
     /**
@@ -218,7 +225,6 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
 
     function registerBridge(address bridge, uint8 priority) external onlyRole(OPERATOR_ROLE) {
         require(bridge != address(0), "GateKeeper: zero address");
-        require(bridgePriorities[bridge] == 0, "GateKeeper: bridge already registered");
         bridgePriorities[bridge] = priority;
         bridges.push(bridge);
     }
@@ -257,8 +263,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
      * @param to The address of the destination contract;
      * @param chainIdTo The ID of the chain where the destination contract resides;
      * @param payToken The address of the ERC20 token used to pay the fee or address(0) if Ether is used.
-     * @param bridgeNumber Number of bridges through which data will be transferred.
-     * @param valuesToSpend  value [ [AxelarValueHUB, LZValueHUB], [AxelarValueSOURCE, LZValueSOURCE] ]
+     * @param spentValue  value [ [AxelarValueHUB, LZValueHUB], [AxelarValueSOURCE, LZValueSOURCE] ]
      * @param comissionLZ  comission [LZCommissionHUB, LZCommissionSOURCE]
      */
     function sendData(
@@ -266,74 +271,84 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         address to,
         uint64 chainIdTo,
         address payToken,
-        uint8 bridgeNumber,
-        uint256[][] memory valuesToSpend,
+        uint256[][] memory spentValue,
         bytes[] memory comissionLZ
     ) external payable nonReentrant {
 
         payable(treasury).transfer(msg.value);
         
-        bytes32 dataHash;
-        {
-            uint256 amountToPayEywa = calculateCost(payToken, data.length, chainIdTo, msg.sender);
-            _proceedCrosschainFees(payToken, amountToPayEywa, valuesToSpend);
+        address[] memory selectedBridges = _selectBridgesByPriority(bridgeNumber);
+        uint8 selectedBridgesLength = uint8(selectedBridges.length);
+        uint256 spentValueEywa;
 
-            uint256 nonce = IBridgeV2(bridgeEywa).nonces(msg.sender);
-            bytes32 requestId = RequestIdLib.prepareRequestId(
-                castToBytes32(to),
-                chainIdTo,
-                castToBytes32(msg.sender),
-                block.chainid,
-                nonce
-            );
-            bytes memory info = abi.encodeWithSelector(
-                IValidatedDataReciever.receiveValidatedData.selector,
-                bytes4(data[:4]),
-                msg.sender,
-                block.chainid
-            );
-            bytes memory out = abi.encode(data, info, _popValues(valuesToSpend), _popCommissions(comissionLZ));
+        for (uint8 i; i < selectedBridgesLength; ++i) {
+            bytes memory out;
+            uint256 nonce;
+            bytes32 requestId;
+            {
+                nonce = IBridgeV2(bridgeEywa).nonces(msg.sender);
+                requestId = RequestIdLib.prepareRequestId(
+                    castToBytes32(to),
+                    chainIdTo,
+                    castToBytes32(msg.sender),
+                    block.chainid,
+                    nonce
+                );
+                bytes memory info = abi.encodeWithSelector(
+                    IValidatedDataReciever.receiveValidatedData.selector,
+                    bytes4(data[:4]),
+                    msg.sender,
+                    block.chainid
+                );
+                bytes memory collectedData = abi.encode(data, info, _popValues(spentValue), _popCommissions(comissionLZ));
+                if (i == 0) {
+                    out = abi.encode(collectedData, false);
+                } else {
+                    out = abi.encode(keccak256(collectedData), true);
+                }
+            }
 
-            IBridgeV2(bridgeEywa).sendV2(
-                IBridgeV2.SendParams({
-                    requestId: requestId,
-                    data: out,
-                    to: to,
-                    chainIdTo: chainIdTo
-                }),
-                msg.sender,
-                nonce
-            );
-            dataHash = keccak256(abi.encode(requestId, out, to, chainIdTo));
+            if (selectedBridges[i] == bridgeEywa) {
+                spentValueEywa = calculateCost(payToken, out.length, chainIdTo, msg.sender);
+                IBridgeV2(bridgeEywa).sendV2(
+                    IBridgeV2.SendParams({
+                        requestId: requestId,
+                        data: out,
+                        to: to,
+                        chainIdTo: chainIdTo
+                    }),
+                    msg.sender,
+                    nonce
+                );
+            } else {
+                _sendCustomBridge(selectedBridges[i], out, chainIdTo, to, spentValue, comissionLZ);
+            }
+            _proceedCrosschainFees(payToken, spentValueEywa, spentValue);
         }
-        _sendHash(bridgeNumber, abi.encode(dataHash), chainIdTo, to, valuesToSpend, comissionLZ);
     }
 
-    function _sendHash(
-        uint8 bridgeNumber,
+    function _sendEywaBridge() internal {
+
+    }
+
+    function _sendCustomBridge(
+        address bridge,
         bytes memory dataHash,
         uint64 chainIdTo,
-        address toCall,
-        uint256[][] memory valuesToSpend,
+        address executor,
+        uint256[][] memory spentValue,
         bytes[] memory comissionLZ
     ) internal {
-        address[] memory selectedBridges = _selectBridgesByPriority(bridgeNumber - 1);
-        uint8 selectedBridgesLength = uint8(selectedBridges.length);
 
-        // TODO what if msg.sender isn't router? P.S. It must be our router, because gateKeeper.sendData gives
-        // access to HUB treasury
-        address addressBook = IRouter(msg.sender).addressBook();
-        for (uint8 i; i < selectedBridgesLength; ++i) {
-            address sourceBridge = IAddressBook(addressBook).getDestinationBridge(selectedBridges[i], chainIdTo);
-            IBridgeV3(selectedBridges[i]).send(
-                dataHash,
-                sourceBridge,
-                chainIdTo,
-                toCall,
-                valuesToSpend,
-                comissionLZ
-            );
-        }
+        address sourceBridge = IAddressBook(addressBook).getDestinationReceiver(bridge, chainIdTo);
+        IBridgeV3(bridge).send(
+            dataHash,
+            sourceBridge,
+            chainIdTo,
+            executor,
+            spentValue,
+            comissionLZ
+        );
     }
 
     function _popValues(uint256[][] memory values) internal pure returns(uint256[][] memory newValues) {
@@ -360,12 +375,12 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
      *
      * @param payToken The address of the token to be used for fee payment.
      * @param transactionCostEywa The amount of fees to be paid for the cross-chain operation.
-     * @param valuesToSpend Value that can spend each bridge.
+     * @param spentValue Value that can spend each bridge.
      */
-    function _proceedCrosschainFees(address payToken, uint256 transactionCostEywa, uint256[][] memory valuesToSpend) private {
-        uint256 lastIndex = valuesToSpend.length - 1;
-        uint256 transactionCostLZ = valuesToSpend[lastIndex][1];
-        uint256 transactionCostAxelar = valuesToSpend[lastIndex][0];
+    function _proceedCrosschainFees(address payToken, uint256 transactionCostEywa, uint256[][] memory spentValue) private {
+        uint256 lastIndex = spentValue.length - 1;
+        uint256 transactionCostLZ = spentValue[lastIndex][1];
+        uint256 transactionCostAxelar = spentValue[lastIndex][0];
 
         uint256 totalCost = transactionCostEywa + transactionCostLZ + transactionCostAxelar;
         emit CrossChainCallPaid(msg.sender, payToken, totalCost);
