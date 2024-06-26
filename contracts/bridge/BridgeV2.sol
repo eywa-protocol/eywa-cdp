@@ -29,8 +29,6 @@ contract BridgeV2 is IBridgeV2, AccessControlEnumerable, Typecast, ReentrancyGua
     string public version;
     /// @dev current state Active\Inactive
     State public state;
-    /// @dev nonces
-    mapping(address => uint256) public nonces;
     /// @dev received request IDs against relay
     RequestIdChecker public currentRequestIdChecker;
     /// @dev received request IDs against relay
@@ -121,19 +119,13 @@ contract BridgeV2 is IBridgeV2, AccessControlEnumerable, Typecast, ReentrancyGua
      * @dev Send crosschain request v2.
      *
      * @param params struct with requestId, data, receiver and opposite cahinId
-     * @param from sender's address
-     * @param nonce sender's nonce
      */
     function sendV2(
-        SendParams calldata params,
-        address from,
-        uint256 nonce
+        SendParams calldata params
     ) external override onlyRole(GATEKEEPER_ROLE) returns (bool) {
         require(state == State.Active, "Bridge: state inactive");
         require(previousEpoch.isSet() || currentEpoch.isSet(), "Bridge: epoch not set");
     
-        verifyAndUpdateNonce(from, nonce);
-
         emit RequestSent(
             params.requestId,
             params.data,
@@ -226,16 +218,6 @@ contract BridgeV2 is IBridgeV2, AccessControlEnumerable, Typecast, ReentrancyGua
             params.votersSignature,
             params.votersMask
         );
-    }
-
-    /**
-     * @dev Verifies and updates the sender's nonce.
-     *
-     * @param from sender's address
-     * @param nonce provided nonce
-     */
-    function verifyAndUpdateNonce(address from, uint256 nonce) internal {
-        require(nonces[from]++ == nonce, "Bridge: nonce mismatch");
     }
 
     /**

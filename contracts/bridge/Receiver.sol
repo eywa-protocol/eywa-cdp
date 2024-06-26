@@ -48,27 +48,35 @@ contract Receiver is IReceiver, AccessControlEnumerable {
         bytes32 hash_ = keccak256(receivedData);
         if (payloadThreshold[hash_] >= threshold_) {
             _call(receivedData);
+            delete payloadThreshold[hash_];
         } else {
             payload[hash_] = receivedData;
         }
         // TODO delete payload, delete hash if succeeded
     }
 
-    function receiveHashData(address sender, bytes memory receivedData) external onlyRole(BRIDGE_ROLE) {
-        if (payload[bytes32(receivedData)].length != 0) {
-            _call(payload[bytes32(receivedData)]);
+    function receiveHashData(address sender, bytes32 receivedHash) external onlyRole(BRIDGE_ROLE) {
+        if (payload[receivedHash].length != 0 && payloadThreshold[receivedHash] >= threshold[sender]) {
+            _call(payload[receivedHash]);
+            delete payload[receivedHash];
+            delete payloadThreshold[receivedHash];
         }
         else {
-            payloadThreshold[bytes32(receivedData)]++;
+            payloadThreshold[receivedHash]++;
         }
         // TODO delete payload, delete hash if succeeded
     }
 
     function _call(bytes memory receivedData) internal {
-        (bytes memory payload_, address executor) = abi.decode(receivedData, (bytes, address));
-        (bytes memory data, bytes memory check) = abi.decode(payload_, (bytes, bytes));
+        (
+            bytes memory dataWithSpendings, 
+            bytes memory check, 
+            uint256 nonce,
+            address executor
+        ) = abi.decode(receivedData, (bytes, bytes, uint256, address));
+
         bytes memory result = executor.functionCall(check);
         require(abi.decode(result, (bool)), "Bridge: check failed");
-        executor.functionCall(data, "Receiver: receive failed");
+        executor.functionCall(dataWithSpendings, "Receiver: receive failed");
     }
 }

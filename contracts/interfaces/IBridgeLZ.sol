@@ -8,7 +8,6 @@ interface IBridgeLZ {
         bytes memory data,
         address receiver,
         uint64 chainIdTo,
-        address executor,
         uint256[][] memory valueToSpend,
         bytes[] memory comissionLZ
     ) external payable returns (bool);

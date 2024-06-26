@@ -9,7 +9,6 @@ interface IBridgeV3 {
         bytes memory data,
         address receiver,
         uint64 chainIdTo,
-        address destinationExecutor,
         uint256[][] memory spentValue,
         bytes[] memory comissionLZ
     ) external payable returns (bool);

@@ -90,7 +90,6 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, IBridgeAxelar, Acce
      * @param data  data, which will be sent
      * @param receiver destination receiver address
      * @param chainIdTo  destination chain id 
-     * @param destinationExecutor destination executor address
      * @param spentValue value which will be spent for axelar delivery
      * @param commission gas and eth value for destination execution
      */
@@ -98,11 +97,10 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, IBridgeAxelar, Acce
         bytes memory data,
         address receiver,
         uint64 chainIdTo,
-        address destinationExecutor,
         uint256[][] memory spentValue,
         bytes[] memory commission
     ) public payable override onlyRole(GATEKEEPER_ROLE) returns (bool) {
-        _send(data, receiver, chainIdTo, destinationExecutor, spentValue, commission);
+        _send(data, receiver, chainIdTo, spentValue, commission);
     }
 
     /**
@@ -111,7 +109,6 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, IBridgeAxelar, Acce
      * @param data  data, which will be sent
      * @param receiver destination receiver address
      * @param chainIdTo  destination chain id 
-     * @param destinationExecutor destination executor address
      * @param spentValue value which will be spent for axelar delivery
      * @param commission gas and eth value for destination execution
      */
@@ -119,7 +116,6 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, IBridgeAxelar, Acce
         bytes memory data,
         address receiver,
         uint64 chainIdTo,
-        address destinationExecutor,
         uint256[][] memory spentValue,
         bytes[] memory commission
     ) internal returns (bool) {
@@ -131,22 +127,20 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, IBridgeAxelar, Acce
         uint256 valuesLength = spentValue.length;
         uint256 valueAxelar = spentValue[valuesLength - 1][0];
 
-        bytes memory sendData = abi.encode(data, destinationExecutor);
-
         INativeTreasury(treasury).getValue(valueAxelar);
 
         gasService.payNativeGasForContractCall{value: valueAxelar} (
             address(this),
             chainId,
             destinationAddress,
-            sendData,
+            data,
             treasury
         );
 
         gateway.callContract(
             chainId,
             destinationAddress,
-            sendData
+            data
         );
     }
 

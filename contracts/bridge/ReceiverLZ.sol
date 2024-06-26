@@ -33,18 +33,13 @@ contract ReceiverLZ is OAppReceiver {
         address executor_,
         bytes calldata extraData_
     ) internal override {
-        uint64 chainIdFrom = IBridgeLZ(bridgeLZ).chainIds(origin_.srcEid);
-        require(
-            IAddressBook(addressBook).router(chainIdFrom) == address(uint160(uint256(origin_.sender))),
-            "ReceiverLZ: wrong sender"
-        );
+        address originSender = address(uint160(uint256(origin_.sender)));
         address receiver = IAddressBook(addressBook).receiver();
         (bytes memory payload, bool isHash) = abi.decode(message_, (bytes, bool));
         if (isHash){
-            IReceiver(receiver).receiveHashData(payload);
-
+            IReceiver(receiver).receiveHashData(originSender, bytes32(payload));
         } else {
-            IReceiver(receiver).receiveData(payload);
+            IReceiver(receiver).receiveData(originSender, payload);
         }
     }
 }

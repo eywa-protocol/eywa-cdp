@@ -48,6 +48,8 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     /// @dev caller => discounts, [0, 10000]
     mapping(address => uint256) public discounts;
 
+    mapping(address => uint256) public nonces;
+
     // @dev brdige => priority, 1 higher than 10, 0 priority turns off the bridge
     mapping(address => uint8) public bridgePriorities;   
     // @dev rigistered bridges
@@ -56,8 +58,8 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     address public treasury;
     
     address public addressBook;
-
-    uint8 bridgeNumber = 2;
+    /// @dev protocol -> threshold
+    mapping(address => uint8) public threshold;
     
 
     
@@ -79,13 +81,6 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         bridgeEywa = bridgeEYWA_;
         treasury = treasury_;
         addressBook = addressBook_;
-    }
-
-    /**
-     * @dev Returns same nonce as bridge (on request from same sender).
-     */
-    function getNonce() external view returns (uint256 nonce) {
-        nonce = IBridgeV2(bridgeEywa).nonces(msg.sender);
     }
 
     /**
@@ -263,8 +258,8 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
      * @param to The address of the destination contract;
      * @param chainIdTo The ID of the chain where the destination contract resides;
      * @param payToken The address of the ERC20 token used to pay the fee or address(0) if Ether is used.
-     * @param spentValue  value [ [AxelarValueHUB, LZValueHUB], [AxelarValueSOURCE, LZValueSOURCE] ]
-     * @param comissionLZ  comission [LZCommissionHUB, LZCommissionSOURCE]
+     * @param spentValue  Values that will be spent during cross-chain [ [AxelarValueHUB, LZValueHUB], [AxelarValueSOURCE, LZValueSOURCE] ]
+     * @param comissionLZ  Gas commision for execution in other chains [LZCommissionHUB, LZCommissionSOURCE]
      */
     function sendData(
         bytes calldata data,
@@ -277,16 +272,14 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
 
         payable(treasury).transfer(msg.value);
         
-        address[] memory selectedBridges = _selectBridgesByPriority(bridgeNumber);
-        uint8 selectedBridgesLength = uint8(selectedBridges.length);
+        address[] memory selectedBridges = _selectBridgesByPriority(threshold[msg.sender]);
         uint256 spentValueEywa;
 
-        for (uint8 i; i < selectedBridgesLength; ++i) {
+        for (uint8 i; i < selectedBridges.length; ++i) {
             bytes memory out;
-            uint256 nonce;
             bytes32 requestId;
             {
-                nonce = IBridgeV2(bridgeEywa).nonces(msg.sender);
+                uint256 nonce = nonces[msg.sender]++;
                 requestId = RequestIdLib.prepareRequestId(
                     castToBytes32(to),
                     chainIdTo,
@@ -300,11 +293,18 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
                     msg.sender,
                     block.chainid
                 );
-                bytes memory collectedData = abi.encode(data, info, _popValues(spentValue), _popCommissions(comissionLZ));
+                bytes memory collectedData = abi.encode(
+                    abi.encode(data, _popValues(spentValue), _popCommissions(comissionLZ)), 
+                    info, 
+                    nonce, 
+                    to
+                );
                 if (i == 0) {
-                    out = abi.encode(collectedData, false);
+                    bool isHash = false;
+                    out = abi.encode(collectedData, isHash);
                 } else {
-                    out = abi.encode(keccak256(collectedData), true);
+                    bool isHash = true;
+                    out = abi.encode(keccak256(collectedData), isHash);
                 }
             }
 
@@ -316,36 +316,28 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
                         data: out,
                         to: to,
                         chainIdTo: chainIdTo
-                    }),
-                    msg.sender,
-                    nonce
+                    })
                 );
             } else {
-                _sendCustomBridge(selectedBridges[i], out, chainIdTo, to, spentValue, comissionLZ);
+                _sendCustomBridge(selectedBridges[i], out, chainIdTo, spentValue, comissionLZ);
             }
-            _proceedCrosschainFees(payToken, spentValueEywa, spentValue);
         }
-    }
-
-    function _sendEywaBridge() internal {
-
+        _proceedCrosschainFees(payToken, spentValueEywa, spentValue);
     }
 
     function _sendCustomBridge(
         address bridge,
-        bytes memory dataHash,
+        bytes memory data,
         uint64 chainIdTo,
-        address executor,
         uint256[][] memory spentValue,
         bytes[] memory comissionLZ
     ) internal {
 
         address sourceBridge = IAddressBook(addressBook).getDestinationReceiver(bridge, chainIdTo);
         IBridgeV3(bridge).send(
-            dataHash,
+            data,
             sourceBridge,
             chainIdTo,
-            executor,
             spentValue,
             comissionLZ
         );

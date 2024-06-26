@@ -27,19 +27,14 @@ contract ReceiverAxelar is AxelarExpressExecutable {
         string calldata sourceAddress,
         bytes calldata payload_
     ) internal override {
-        uint64 chainIdFrom = IBridgeAxelar(bridgeAxelar).chainIds(sourceChain);
-        address router = IAddressBook(addressBook).router(chainIdFrom);
-        require(
-            keccak256(abi.encode(Strings.toHexString(router))) == keccak256(abi.encode(sourceAddress)),
-            "ReceiverAxelar: wrong sender"
-        );
+        address originSender = _convertStringToAddress(sourceAddress);
         address receiver = IAddressBook(addressBook).receiver();
         (bytes memory payload, bool isHash) = abi.decode(payload_, (bytes, bool));
         if (isHash){
-            IReceiver(receiver).receiveHashData(payload);
+            IReceiver(receiver).receiveHashData(originSender, bytes32(payload));
 
         } else {
-            IReceiver(receiver).receiveData(payload);
+            IReceiver(receiver).receiveData(originSender, payload);
         }
     }
 

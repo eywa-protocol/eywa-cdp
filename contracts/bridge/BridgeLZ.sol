@@ -100,7 +100,6 @@ contract BridgeLZ is OAppSender, IBridgeV3, IBridgeLZ, AccessControlEnumerable, 
      * @param data  data, which will be sent
      * @param receiver destination receiver address
      * @param chainIdTo  destination chain id 
-     * @param destinationExecutor destination executor address
      * @param spentValue value which will be spent for lz delivery
      * @param commissionLZ gas and eth value for destination execution
      */
@@ -108,12 +107,11 @@ contract BridgeLZ is OAppSender, IBridgeV3, IBridgeLZ, AccessControlEnumerable, 
         bytes memory data,
         address receiver,
         uint64 chainIdTo,
-        address destinationExecutor,
         uint256[][] memory spentValue,
         bytes[] memory commissionLZ
     ) public payable override onlyRole(GATEKEEPER_ROLE) returns (bool) {
         if (msg.value > 0) {
-            _send(data, receiver, chainIdTo, destinationExecutor, spentValue, commissionLZ);
+            _send(data, receiver, chainIdTo, spentValue, commissionLZ);
         } else {
 
             uint256 valuesLength = spentValue.length;
@@ -124,7 +122,6 @@ contract BridgeLZ is OAppSender, IBridgeV3, IBridgeLZ, AccessControlEnumerable, 
                 data,
                 receiver,
                 chainIdTo,
-                destinationExecutor,
                 spentValue,
                 commissionLZ
             );
@@ -136,7 +133,6 @@ contract BridgeLZ is OAppSender, IBridgeV3, IBridgeLZ, AccessControlEnumerable, 
      * @param data data, which will be sent
      * @param receiver destination receiver address
      * @param chainIdTo destination chain id 
-     * @param destinationExecutor destination executor address
      * @param spentValue value which will be spent for lz delivery
      * @param commissionLZ gas and eth value for destination execution
      */
@@ -144,11 +140,10 @@ contract BridgeLZ is OAppSender, IBridgeV3, IBridgeLZ, AccessControlEnumerable, 
         bytes memory data,
         address receiver,
         uint64 chainIdTo,
-        address destinationExecutor,
         uint256[][] memory spentValue,
         bytes[] memory commissionLZ
     ) public payable onlyRole(TREASURY_ROLE) returns (bool) {
-        _send(data, receiver, chainIdTo, destinationExecutor, spentValue, commissionLZ);
+        _send(data, receiver, chainIdTo, spentValue, commissionLZ);
     }
 
     /**
@@ -157,7 +152,6 @@ contract BridgeLZ is OAppSender, IBridgeV3, IBridgeLZ, AccessControlEnumerable, 
      * @param data  data, which will be sent
      * @param receiver destination receiver address
      * @param chainIdTo  destination chain id 
-     * @param destinationExecutor destination executor address
      * @param spentValue value which will be spent for lz delivery
      * @param commissionLZ gas and eth value for destination execution
      */
@@ -165,7 +159,6 @@ contract BridgeLZ is OAppSender, IBridgeV3, IBridgeLZ, AccessControlEnumerable, 
         bytes memory data,
         address receiver,
         uint64 chainIdTo,
-        address destinationExecutor,
         uint256[][] memory spentValue,
         bytes[] memory commissionLZ
     ) internal returns (bool) {
@@ -176,10 +169,9 @@ contract BridgeLZ is OAppSender, IBridgeV3, IBridgeLZ, AccessControlEnumerable, 
 
         bytes memory commission = commissionLZ[valuesLength - 1];
 
-        bytes memory sendData = abi.encode(data, destinationExecutor);
         _lzSend(
             dstEids[chainIdTo],
-            sendData,
+            data,
             commission,  
             MessagingFee(valueLZ, 0),
             treasury
