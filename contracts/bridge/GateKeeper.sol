@@ -62,7 +62,6 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     mapping(address => uint8) public threshold;
     
 
-    
     event CrossChainCallPaid(address indexed sender, address indexed token, uint256 transactionCost);
     event BridgeSet(address bridge);
     event BaseFeeSet(uint64 chainId, address payToken, uint256 fee);
@@ -160,22 +159,6 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     }
 
     /**
-     * @notice Calculates the final amount to be paid after applying a discount percentage to the original amount.
-     *
-     * @param amount The original amount to be paid;
-     * @param basePercent The percentage of discount to be applied;
-     * @return amountToPay The final amount to be paid after the discount has been applied.
-     */
-    function _getPercentValues(
-        uint256 amount,
-        uint256 basePercent
-    ) private pure returns (uint256 amountToPay) {
-        require(amount >= 10, "GateKeeper: amount is too small");
-        uint256 discount = (amount * basePercent) / 10000;
-        amountToPay = amount - discount;
-    }
-
-    /**
      * @notice Allows the owner to withdraw collected fees from the contract. Use address(0) to
      * withdraw native asset.
      *
@@ -191,6 +174,17 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
             SafeERC20.safeTransfer(IERC20(token), to, amount);
         }
         emit FeesWithdrawn(token, amount, to);
+    }
+
+    /**
+     * @notice Sets sender's threshold. Must be the same on the receiver's side.
+     *
+     * @param sender The protocol contract address;
+     * @param threshold_ The threshold for the given contract address.
+     */
+    function setThreshold(address sender, uint8 threshold_) external onlyRole(OPERATOR_ROLE) {
+        require(threshold_ >= 1, "GateKeeper: wrong threshold");
+        threshold[sender] = threshold_;
     }
 
     // if priority = 0, bridge disabled
@@ -210,28 +204,6 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         require(bridge != address(0), "GateKeeper: zero address");
         bridgePriorities[bridge] = priority;
         bridges.push(bridge);
-    }
-
-    function _selectBridgesByPriority(uint8 bridgeNumber) private view returns (address[] memory) {
-        address[] memory selectedBridges = new address[](bridgeNumber);
-        if (bridgeNumber == 0) return selectedBridges;
-        address[] memory tempBridges = bridges;
-        uint8 highestPriority = 255;
-        uint8 highestPriorityIndex;
-        uint256 tempBridgesLength = tempBridges.length;
-        for (uint8 i; i < bridgeNumber; ++i) {
-            for (uint8 j; j < tempBridgesLength; ++j) {
-                if (bridgePriorities[tempBridges[j]] != 0 && highestPriority > bridgePriorities[tempBridges[j]]) {
-                    highestPriority = bridgePriorities[tempBridges[j]];
-                    highestPriorityIndex = j;
-                }
-            }
-            selectedBridges[i] = tempBridges[highestPriorityIndex];
-            highestPriority = 255;
-            tempBridges[highestPriorityIndex] = address(0);
-        }
-        require(selectedBridges.length == bridgeNumber, "GateKeeper: not enough bridges");
-        return selectedBridges;
     }
 
     /**
@@ -311,6 +283,44 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
             }
         }
         _proceedCrosschainFees(payToken, spentValueEywa, spentValue);
+    }
+
+    /**
+     * @notice Calculates the final amount to be paid after applying a discount percentage to the original amount.
+     *
+     * @param amount The original amount to be paid;
+     * @param basePercent The percentage of discount to be applied;
+     * @return amountToPay The final amount to be paid after the discount has been applied.
+     */
+    function _getPercentValues(
+        uint256 amount,
+        uint256 basePercent
+    ) private pure returns (uint256 amountToPay) {
+        require(amount >= 10, "GateKeeper: amount is too small");
+        uint256 discount = (amount * basePercent) / 10000;
+        amountToPay = amount - discount;
+    }
+
+    function _selectBridgesByPriority(uint8 bridgeNumber) private view returns (address[] memory) {
+        address[] memory selectedBridges = new address[](bridgeNumber);
+        if (bridgeNumber == 0) return selectedBridges;
+        address[] memory tempBridges = bridges;
+        uint8 highestPriority = 255;
+        uint8 highestPriorityIndex;
+        uint256 tempBridgesLength = tempBridges.length;
+        for (uint8 i; i < bridgeNumber; ++i) {
+            for (uint8 j; j < tempBridgesLength; ++j) {
+                if (bridgePriorities[tempBridges[j]] != 0 && highestPriority > bridgePriorities[tempBridges[j]]) {
+                    highestPriority = bridgePriorities[tempBridges[j]];
+                    highestPriorityIndex = j;
+                }
+            }
+            selectedBridges[i] = tempBridges[highestPriorityIndex];
+            highestPriority = 255;
+            tempBridges[highestPriorityIndex] = address(0);
+        }
+        require(selectedBridges.length == bridgeNumber, "GateKeeper: not enough bridges");
+        return selectedBridges;
     }
 
     function _sendCustomBridge(
