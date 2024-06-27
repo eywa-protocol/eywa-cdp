@@ -52,7 +52,6 @@ contract Receiver is IReceiver, AccessControlEnumerable {
         } else {
             payload[hash_] = receivedData;
         }
-        // TODO delete payload, delete hash if succeeded
     }
 
     function receiveHashData(address sender, bytes32 receivedHash) external onlyRole(BRIDGE_ROLE) {
@@ -64,19 +63,18 @@ contract Receiver is IReceiver, AccessControlEnumerable {
         else {
             payloadThreshold[receivedHash]++;
         }
-        // TODO delete payload, delete hash if succeeded
     }
 
     function _call(bytes memory receivedData) internal {
         (
-            bytes memory dataWithSpendings, 
-            bytes memory check, 
+            bytes memory dataWithSpendings,
+            bytes memory check,
             uint256 nonce,
             address executor
         ) = abi.decode(receivedData, (bytes, bytes, uint256, address));
 
         bytes memory result = executor.functionCall(check);
-        require(abi.decode(result, (bool)), "Bridge: check failed");
+        require(abi.decode(result, (bool)), "Receiver: check failed");
         executor.functionCall(dataWithSpendings, "Receiver: receive failed");
     }
 }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
-// Copyright (c) Eywa.Fi, 2021-2023 - all rights reserved
+// Copyright (c) Eywa.Fi, 2021-2024 - all rights reserved
 pragma solidity ^0.8.17;
+
 
 interface IBridgeV2 {
 
@@ -34,9 +35,7 @@ interface IBridgeV2 {
         uint256 votersMask;
     }
 
-    function sendV2(
-        SendParams calldata params
-    ) external returns (bool);
+    function sendV2(SendParams calldata params) external returns (bool);
 
     function receiveV2(ReceiveParams[] calldata params) external returns (bool);
 

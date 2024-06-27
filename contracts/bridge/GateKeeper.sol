@@ -10,10 +10,10 @@ import "../utils/Typecast.sol";
 import "../utils/RequestIdLib.sol";
 import "../interfaces/IBridgeV3.sol";
 import "../interfaces/IBridgeV2.sol";
-import "../interfaces/IRouter.sol";
 import "../interfaces/IGateKeeper.sol";
 import "../interfaces/IAddressBook.sol";
 import "../interfaces/IValidatedDataReciever.sol";
+
 
 contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, ReentrancyGuard {
     using Address for address;
@@ -191,18 +191,6 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
             SafeERC20.safeTransfer(IERC20(token), to, amount);
         }
         emit FeesWithdrawn(token, amount, to);
-    }
-
-    function bytes32ToString(bytes32 _bytes32) public pure returns (string memory) {
-        uint8 i = 0;
-        while(i < 32 && _bytes32[i] != 0) {
-            i++;
-        }
-        bytes memory bytesArray = new bytes(i);
-        for (i = 0; i < 32 && _bytes32[i] != 0; i++) {
-            bytesArray[i] = _bytes32[i];
-        }
-        return string(bytesArray);
     }
 
     // if priority = 0, bridge disabled
