@@ -21,5 +21,4 @@ interface IGateKeeper {
         bytes[] memory comission
     ) external payable;
 
-    function bridgeEywa() external view returns (address);
 }

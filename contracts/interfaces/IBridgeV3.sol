@@ -2,13 +2,14 @@
 // Copyright (c) Eywa.Fi, 2021-2024 - all rights reserved
 pragma solidity ^0.8.17;
 
+import './IBridgeV2.sol';
 
 interface IBridgeV3 {
 
-    function send(
-        bytes memory data,
-        address receiver,
-        uint64 chainIdTo,
+    function sendV3(
+        IBridgeV2.SendParams memory params,
+        uint256 nonce,
+        address sender,
         uint256[][] memory spentValue,
         bytes[] memory comissionLZ
     ) external payable returns (bool);

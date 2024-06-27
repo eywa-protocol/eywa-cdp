@@ -7,7 +7,6 @@ interface IBridgeLZ {
 
     function sendFromTreasury(
         bytes memory data,
-        address receiver,
         uint64 chainIdTo,
         uint256[][] memory valueToSpend,
         bytes[] memory comissionLZ

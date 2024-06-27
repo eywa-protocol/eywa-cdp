@@ -7,7 +7,6 @@ interface INativeTreasury {
     function callFromTreasury(
         uint256 value_,
         bytes memory data,
-        address receiver,
         uint64 chainIdTo,
         uint256[][] memory spentValue,
         bytes[] memory comissionLZ

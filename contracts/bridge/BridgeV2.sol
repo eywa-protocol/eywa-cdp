@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "../interfaces/IBridgeV2.sol";
+import "../interfaces/IReceiver.sol";
 import "../utils/Block.sol";
 import "../utils/Bls.sol";
 import "../utils/Merkle.sol";
@@ -24,7 +25,10 @@ contract BridgeV2 is IBridgeV2, AccessControlEnumerable, Typecast, ReentrancyGua
     bytes32 public constant VALIDATOR_ROLE = keccak256("VALIDATOR_ROLE");
     /// @dev operator role id
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
-
+    /// @dev nonce for senders
+    mapping(address => uint256) public nonces;
+    /// @dev receiver that store thresholds
+    address public receiver;
     /// @dev human readable version
     string public version;
     /// @dev current state Active\Inactive
@@ -121,11 +125,15 @@ contract BridgeV2 is IBridgeV2, AccessControlEnumerable, Typecast, ReentrancyGua
      * @param params struct with requestId, data, receiver and opposite cahinId
      */
     function sendV2(
-        SendParams calldata params
-    ) external override onlyRole(GATEKEEPER_ROLE) returns (bool) {
+        SendParams calldata params,
+        uint256 nonce,
+        address sender
+    ) public override onlyRole(GATEKEEPER_ROLE) returns (bool) {
         require(state == State.Active, "Bridge: state inactive");
         require(previousEpoch.isSet() || currentEpoch.isSet(), "Bridge: epoch not set");
-    
+        require(nonce > nonces[sender], "Bridge: wrong nonce");
+        nonces[sender] = nonce;
+
         emit RequestSent(
             params.requestId,
             params.data,
@@ -134,6 +142,21 @@ contract BridgeV2 is IBridgeV2, AccessControlEnumerable, Typecast, ReentrancyGua
         );
 
         return true;
+    }
+
+    /**
+     * @dev Send crosschain request v3.
+     *
+     * @param params struct with requestId, data, receiver and opposite cahinId
+     */
+    function sendV3(
+        SendParams calldata params,
+        uint256 nonce,
+        address sender,
+        uint256[][] memory spentValue,
+        bytes[] memory comission
+    ) external onlyRole(GATEKEEPER_ROLE) returns (bool) {
+        sendV2(params, nonce, sender);
     }
 
     /**
@@ -177,11 +200,13 @@ contract BridgeV2 is IBridgeV2, AccessControlEnumerable, Typecast, ReentrancyGua
             string memory err;
             
             if (isRequestIdUniq) {
-                (bytes memory data, bytes memory check) = abi.decode(receivedData, (bytes, bytes));
-                bytes memory result = to.functionCall(check);
-                require(abi.decode(result, (bool)), "Bridge: check failed");
-                
-                to.functionCall(data, "Bridge: receive failed");
+                bool isHash;
+                (payload, isHash) = abi.decode(receivedData, (bytes, bool));
+                if (isHash){
+                    IReceiver(receiver).receiveHashData(address(this), bytes32(payload));
+                } else {
+                    IReceiver(receiver).receiveData(address(this), payload);
+                }
             } else {
                 revert("Bridge: request id already seen");
             }

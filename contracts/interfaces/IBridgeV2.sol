@@ -35,7 +35,11 @@ interface IBridgeV2 {
         uint256 votersMask;
     }
 
-    function sendV2(SendParams calldata params) external returns (bool);
+    function sendV2(
+        SendParams calldata params,
+        uint256 nonce,
+        address sender
+    ) external returns (bool);
 
     function receiveV2(ReceiveParams[] calldata params) external returns (bool);
 

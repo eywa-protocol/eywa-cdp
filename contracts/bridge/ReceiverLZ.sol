@@ -15,15 +15,12 @@ import "../interfaces/INativeTreasury.sol";
 
 contract ReceiverLZ is OAppReceiver {
     
-    address public bridgeLZ;
-    address public addressBook;
-    constructor(address endpoint_, address owner_, address bridgeLZ_, address addressBook_) OAppCore(endpoint_, owner_) {
+    address public receiver;
+    constructor(address endpoint_, address owner_, address receiver_) OAppCore(endpoint_, owner_) {
         require(endpoint_ != address(0), "ReceiverLZ: zero address");
         require(owner_ != address(0), "ReceiverLZ: zero address");
-        require(bridgeLZ_ != address(0), "ReceiverLZ: zero address");
-        require(addressBook_ != address(0), "ReceiverLZ: zero address");
-        bridgeLZ = bridgeLZ_;
-        addressBook = addressBook_;
+        require(receiver_ != address(0), "ReceiverLZ: zero address");
+        receiver = receiver_;
     }
 
     function _lzReceive(
@@ -34,7 +31,6 @@ contract ReceiverLZ is OAppReceiver {
         bytes calldata extraData_
     ) internal override {
         address originSender = address(uint160(uint256(origin_.sender)));
-        address receiver = IAddressBook(addressBook).receiver();
         (bytes memory payload, bool isHash) = abi.decode(message_, (bytes, bool));
         if (isHash){
             IReceiver(receiver).receiveHashData(originSender, bytes32(payload));

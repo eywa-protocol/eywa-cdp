@@ -32,6 +32,8 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, IBridgeAxelar, Acce
     mapping(uint64 => string) public networkById;
     /// @dev dstEid => chainIdTo
     mapping(string => uint64) public chainIds;
+    /// @dev chainIdTo => receiver
+    mapping (uint64 => address) public receivers;
     /// @dev Axelar gas service
     IAxelarGasService public immutable gasService;
     /// @dev native treasury address
@@ -85,37 +87,34 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, IBridgeAxelar, Acce
         emit TreasurySet(treasury_);
     }
 
-    /**
-     * @dev Send data to receiver in chainIdTo
-     * 
-     * @param data  data, which will be sent
-     * @param receiver destination receiver address
-     * @param chainIdTo  destination chain id 
-     * @param spentValue value which will be spent for axelar delivery
-     * @param commission gas and eth value for destination execution
-     */
-    function send(
-        bytes memory data,
-        address receiver,
-        uint64 chainIdTo,
+    // /**
+    //  * @dev Send data to receiver in chainIdTo
+    //  * 
+    //  * @param data  data, which will be sent
+    //  * @param chainIdTo  destination chain id 
+    //  * @param spentValue value which will be spent for axelar delivery
+    //  * @param commission gas and eth value for destination execution
+    //  */
+    function sendV3(
+        IBridgeV2.SendParams calldata params,
+        uint256 nonce,
+        address sender,
         uint256[][] memory spentValue,
-        bytes[] memory commission
+        bytes[] memory comission
     ) public payable override onlyRole(GATEKEEPER_ROLE) returns (bool) {
-        _send(data, receiver, chainIdTo, spentValue, commission);
+        _send(params.data, uint64(params.chainIdTo), spentValue, comission);
     }
 
     /**
      * @dev Send data to receiver in chainIdTo
      * 
      * @param data  data, which will be sent
-     * @param receiver destination receiver address
      * @param chainIdTo  destination chain id 
      * @param spentValue value which will be spent for axelar delivery
      * @param commission gas and eth value for destination execution
      */
     function _send(
         bytes memory data,
-        address receiver,
         uint64 chainIdTo,
         uint256[][] memory spentValue,
         bytes[] memory commission
@@ -123,7 +122,7 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, IBridgeAxelar, Acce
         require(state == IBridgeV2.State.Active, "BridgeAxelar: state inactive");
 
         string memory chainId = networkById[chainIdTo];
-        string memory destinationAddress = Strings.toHexString(uint160(receiver), 20);
+        string memory destinationAddress = Strings.toHexString(uint160(receivers[chainIdTo]), 20);
 
         uint256 valuesLength = spentValue.length;
         uint256 valueAxelar = spentValue[valuesLength - 1][0];

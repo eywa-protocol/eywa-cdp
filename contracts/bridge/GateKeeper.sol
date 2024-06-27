@@ -13,7 +13,7 @@ import "../interfaces/IBridgeV2.sol";
 import "../interfaces/IGateKeeper.sol";
 import "../interfaces/IAddressBook.sol";
 import "../interfaces/IValidatedDataReciever.sol";
-
+import "hardhat/console.sol";
 
 contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, ReentrancyGuard {
     using Address for address;
@@ -39,15 +39,13 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     /// @dev operator role id
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
 
-    /// @dev bridge conract, can be changed any time
-    address public bridgeEywa;
     /// @dev chainId => pay token => base fees
     mapping(uint64 => mapping(address => uint256)) public baseFees;
     /// @dev chainId => pay token => rate (per byte)
     mapping(uint64 => mapping(address => uint256)) public rates;
     /// @dev caller => discounts, [0, 10000]
     mapping(address => uint256) public discounts;
-
+    /// @dev nonce for senders
     mapping(address => uint256) public nonces;
 
     // @dev brdige => priority, 1 higher than 10, 0 priority turns off the bridge
@@ -57,7 +55,6 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     // @dev treasury for native value
     address public treasury;
     
-    address public addressBook;
     /// @dev protocol -> threshold
     mapping(address => uint8) public threshold;
     
@@ -72,27 +69,10 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     event TreasurySet(address treasury);
 
 
-    constructor(address bridgeEYWA_, address treasury_, address addressBook_) {
+    constructor(address treasury_) {
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
-        require(bridgeEYWA_ != address(0), "GateKeeper: zero address");
         require(treasury_ != address(0), "GateKeeper: zero address");
-        require(addressBook_ != address(0), "GateKeeper: zero address");
-        bridgeEywa = bridgeEYWA_;
         treasury = treasury_;
-        addressBook = addressBook_;
-    }
-
-    /**
-     * @notice Sets the address of the BridgeV2 contract.
-     *
-     * @dev Only the contract owner is allowed to call this function.
-     *
-     * @param bridge_ the address of the new BridgeV2 contract to be set.
-     */
-    function setBridge(address bridge_) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(bridge_ != address(0), "GateKeeper: zero address");
-        bridgeEywa = bridge_;
-        emit BridgeSet(bridgeEywa);
     }
 
     /**
@@ -231,15 +211,13 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     ) external payable nonReentrant {
 
         payable(treasury).transfer(msg.value);
-        
         address[] memory selectedBridges = _selectBridgesByPriority(threshold[msg.sender]);
-        uint256 spentValueEywa;
-
+        bytes memory out;
         for (uint8 i; i < selectedBridges.length; ++i) {
-            bytes memory out;
             bytes32 requestId;
+            uint256 nonce;
             {
-                uint256 nonce = nonces[msg.sender]++;
+                nonce = nonces[msg.sender]++;
                 requestId = RequestIdLib.prepareRequestId(
                     castToBytes32(to),
                     chainIdTo,
@@ -268,20 +246,23 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
                 }
             }
 
-            if (selectedBridges[i] == bridgeEywa) {
-                spentValueEywa = calculateCost(payToken, out.length, chainIdTo, msg.sender);
-                IBridgeV2(bridgeEywa).sendV2(
-                    IBridgeV2.SendParams({
+            _sendCustomBridge(
+                selectedBridges[i], 
+                IBridgeV2.SendParams({
                         requestId: requestId,
                         data: out,
                         to: to,
                         chainIdTo: chainIdTo
-                    })
-                );
-            } else {
-                _sendCustomBridge(selectedBridges[i], out, chainIdTo, spentValue, comissionLZ);
-            }
+                }), 
+                nonce,
+                msg.sender,
+                spentValue, 
+                comissionLZ
+            );
+            
         }
+
+        uint256 spentValueEywa = calculateCost(payToken, out.length, chainIdTo, msg.sender);
         _proceedCrosschainFees(payToken, spentValueEywa, spentValue);
     }
 
@@ -325,17 +306,18 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
 
     function _sendCustomBridge(
         address bridge,
-        bytes memory data,
-        uint64 chainIdTo,
+        IBridgeV2.SendParams memory params,
+        uint256 nonce,
+        address sender,
         uint256[][] memory spentValue,
         bytes[] memory comissionLZ
     ) internal {
-
-        address sourceBridge = IAddressBook(addressBook).getDestinationReceiver(bridge, chainIdTo);
-        IBridgeV3(bridge).send(
-            data,
-            sourceBridge,
-            chainIdTo,
+        console.log('Send bridge:');
+        console.log(bridge);
+        IBridgeV3(bridge).sendV3(
+            params,
+            nonce,
+            sender,
             spentValue,
             comissionLZ
         );

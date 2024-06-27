@@ -30,6 +30,7 @@ contract BridgeLZ is OAppSender, IBridgeV3, IBridgeLZ, AccessControlEnumerable, 
     mapping(uint64 => uint32) public dstEids;
     /// @dev dstEid => chainIdTo
     mapping(uint32 => uint64) public chainIds;
+
     /// @dev native treasury address
     address public treasury;
 
@@ -94,26 +95,25 @@ contract BridgeLZ is OAppSender, IBridgeV3, IBridgeLZ, AccessControlEnumerable, 
         emit DstEidSet(chainIdTo_, dstEid_);
     }
 
-    /**
-     * @dev Send data to receiver in chainIdTo
-     * 
-     * Calls _send directrly or through treasury, if msg.value needed
-     * 
-     * @param data  data, which will be sent
-     * @param receiver destination receiver address
-     * @param chainIdTo  destination chain id 
-     * @param spentValue value which will be spent for lz delivery
-     * @param commissionLZ gas and eth value for destination execution
-     */
-    function send(
-        bytes memory data,
-        address receiver,
-        uint64 chainIdTo,
+    // /**
+    //  * @dev Send data to receiver in chainIdTo
+    //  * 
+    //  * Calls _send directrly or through treasury, if msg.value needed
+    //  * 
+    //  * @param data  data, which will be sent
+    //  * @param chainIdTo  destination chain id 
+    //  * @param spentValue value which will be spent for lz delivery
+    //  * @param commissionLZ gas and eth value for destination execution
+    //  */
+    function sendV3(
+        IBridgeV2.SendParams calldata params,
+        uint256 nonce,
+        address sender,
         uint256[][] memory spentValue,
-        bytes[] memory commissionLZ
+        bytes[] memory comission
     ) public payable override onlyRole(GATEKEEPER_ROLE) returns (bool) {
         if (msg.value > 0) {
-            _send(data, receiver, chainIdTo, spentValue, commissionLZ);
+            _send(params.data, uint64(params.chainIdTo), spentValue, comission);
         } else {
 
             uint256 valuesLength = spentValue.length;
@@ -121,11 +121,10 @@ contract BridgeLZ is OAppSender, IBridgeV3, IBridgeLZ, AccessControlEnumerable, 
 
             INativeTreasury(treasury).callFromTreasury(
                 valueLZ,
-                data,
-                receiver,
-                chainIdTo,
+                params.data,
+                uint64(params.chainIdTo),
                 spentValue,
-                commissionLZ
+                comission
             );
         }
     }
@@ -133,33 +132,29 @@ contract BridgeLZ is OAppSender, IBridgeV3, IBridgeLZ, AccessControlEnumerable, 
      * @dev Call _send from treasury adress with msg.value
      * 
      * @param data data, which will be sent
-     * @param receiver destination receiver address
      * @param chainIdTo destination chain id 
      * @param spentValue value which will be spent for lz delivery
      * @param commissionLZ gas and eth value for destination execution
      */
     function sendFromTreasury(
         bytes memory data,
-        address receiver,
         uint64 chainIdTo,
         uint256[][] memory spentValue,
         bytes[] memory commissionLZ
     ) public payable onlyRole(TREASURY_ROLE) returns (bool) {
-        _send(data, receiver, chainIdTo, spentValue, commissionLZ);
+        _send(data, chainIdTo, spentValue, commissionLZ);
     }
 
     /**
      * @dev Send data to receiver in chainIdTo
      * 
      * @param data  data, which will be sent
-     * @param receiver destination receiver address
      * @param chainIdTo  destination chain id 
      * @param spentValue value which will be spent for lz delivery
      * @param commissionLZ gas and eth value for destination execution
      */
     function _send(
         bytes memory data,
-        address receiver,
         uint64 chainIdTo,
         uint256[][] memory spentValue,
         bytes[] memory commissionLZ
