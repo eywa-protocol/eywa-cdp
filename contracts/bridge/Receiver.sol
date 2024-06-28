@@ -13,7 +13,7 @@ contract Receiver is IReceiver, AccessControlEnumerable {
     using Address for address;
 
     /// @dev bridge role id
-    bytes32 public constant BRIDGE_ROLE = keccak256("BRIDGE_ROLE");
+    bytes32 public constant RECEIVER_ROLE = keccak256("RECEIVER_ROLE");
     /// @dev operator role id
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
 
@@ -53,7 +53,7 @@ contract Receiver is IReceiver, AccessControlEnumerable {
         receiversCount = receiversCount_;
     }
 
-    function receiveData(address sender, bytes memory receivedData) external onlyRole(BRIDGE_ROLE) {
+    function receiveData(address sender, bytes memory receivedData) external onlyRole(RECEIVER_ROLE) {
         uint8 threshold_ = threshold[sender];
         require(threshold_ > 0, "Receiver: threshold is not set");
         bytes32 hash_ = keccak256(receivedData);
@@ -65,7 +65,7 @@ contract Receiver is IReceiver, AccessControlEnumerable {
         }
     }
 
-    function receiveHashData(address sender, bytes32 receivedHash) external onlyRole(BRIDGE_ROLE) {
+    function receiveHashData(address sender, bytes32 receivedHash) external onlyRole(RECEIVER_ROLE) {
         if (payload[receivedHash].length != 0 && payloadThreshold[receivedHash] >= threshold[sender]) {
             _call(payload[receivedHash]);
             delete payload[receivedHash];

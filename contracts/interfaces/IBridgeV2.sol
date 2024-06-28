@@ -37,10 +37,11 @@ interface IBridgeV2 {
 
     function sendV2(
         SendParams calldata params,
-        uint256 nonce,
-        address sender
+        address sender,
+        uint256 nonce
     ) external returns (bool);
 
     function receiveV2(ReceiveParams[] calldata params) external returns (bool);
 
+    function nonces(address sender) external returns(uint256);
 }

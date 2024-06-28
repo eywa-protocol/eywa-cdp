@@ -107,8 +107,8 @@ contract BridgeLZ is OAppSender, IBridgeV3, IBridgeLZ, AccessControlEnumerable, 
     //  */
     function sendV3(
         IBridgeV2.SendParams calldata params,
-        uint256 nonce,
         address sender,
+        uint256 nonce,
         uint256[][] memory spentValue,
         bytes[] memory comission
     ) public payable override onlyRole(GATEKEEPER_ROLE) returns (bool) {

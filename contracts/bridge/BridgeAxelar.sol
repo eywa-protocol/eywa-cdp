@@ -16,6 +16,7 @@ import "../interfaces/IBridgeAxelar.sol";
 import "../interfaces/INativeTreasury.sol";
 
 
+
 contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, IBridgeAxelar, AccessControlEnumerable, ReentrancyGuard {
     
     using Address for address;
@@ -42,6 +43,7 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, IBridgeAxelar, Acce
     event StateSet(IBridgeV2.State state);
     event TreasurySet(address treasury);
     event NetworkSet(uint64 chainIdTo, string network);
+    event ReceiverSet(uint64 chainIdTo, address receiver);
 
     constructor(address gateway_, address gasService_) AxelarExpressExecutable(gateway_) {
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
@@ -60,6 +62,16 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, IBridgeAxelar, Acce
         networkById[chainIdTo_] = network_;
         chainIds[network_] = chainIdTo_;
         emit NetworkSet(chainIdTo_, network_);
+    }
+
+    /**
+     * @dev Set receiver for chainId
+     * 
+     * @param chainIdTo_ Chain ID of receiver
+     */
+    function setReceiver(uint64 chainIdTo_, address receiver_) external {
+        receivers[chainIdTo_] = receiver_;
+        emit ReceiverSet(chainIdTo_, receiver_);
     }
 
     /**
@@ -97,8 +109,8 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, IBridgeAxelar, Acce
     //  */
     function sendV3(
         IBridgeV2.SendParams calldata params,
-        uint256 nonce,
         address sender,
+        uint256 nonce,
         uint256[][] memory spentValue,
         bytes[] memory comission
     ) public payable override onlyRole(GATEKEEPER_ROLE) returns (bool) {

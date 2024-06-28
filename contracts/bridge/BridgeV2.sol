@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "../interfaces/IBridgeV2.sol";
+import "../interfaces/IBridgeV3.sol";
 import "../interfaces/IReceiver.sol";
 import "../utils/Block.sol";
 import "../utils/Bls.sol";
@@ -14,7 +15,7 @@ import "../utils/RequestIdChecker.sol";
 import "../utils/Typecast.sol";
 
 
-contract BridgeV2 is IBridgeV2, AccessControlEnumerable, Typecast, ReentrancyGuard {
+contract BridgeV2 is IBridgeV2, IBridgeV3, AccessControlEnumerable, Typecast, ReentrancyGuard {
     
     using Address for address;
     using Bls for Bls.Epoch;
@@ -126,8 +127,8 @@ contract BridgeV2 is IBridgeV2, AccessControlEnumerable, Typecast, ReentrancyGua
      */
     function sendV2(
         SendParams calldata params,
-        uint256 nonce,
-        address sender
+        address sender,
+        uint256 nonce
     ) public override onlyRole(GATEKEEPER_ROLE) returns (bool) {
         require(state == State.Active, "Bridge: state inactive");
         require(previousEpoch.isSet() || currentEpoch.isSet(), "Bridge: epoch not set");
@@ -151,12 +152,12 @@ contract BridgeV2 is IBridgeV2, AccessControlEnumerable, Typecast, ReentrancyGua
      */
     function sendV3(
         SendParams calldata params,
-        uint256 nonce,
         address sender,
+        uint256 nonce,
         uint256[][] memory spentValue,
         bytes[] memory comission
-    ) external onlyRole(GATEKEEPER_ROLE) returns (bool) {
-        sendV2(params, nonce, sender);
+    ) external payable onlyRole(GATEKEEPER_ROLE) returns (bool) {
+        sendV2(params,sender, nonce);
     }
 
     /**

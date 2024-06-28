@@ -13,7 +13,6 @@ import "../interfaces/IBridgeV2.sol";
 import "../interfaces/IGateKeeper.sol";
 import "../interfaces/IAddressBook.sol";
 import "../interfaces/IValidatedDataReciever.sol";
-import "hardhat/console.sol";
 
 contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, ReentrancyGuard {
     using Address for address;
@@ -182,8 +181,20 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
 
     function registerBridge(address bridge, uint8 priority) external onlyRole(OPERATOR_ROLE) {
         require(bridge != address(0), "GateKeeper: zero address");
+        uint256 bridgesLength = bridges.length;
+        for (uint8 i; i < bridgesLength; ++i) {
+            if (bridge == bridges[i]) {
+                revert("GateKeeper: bridge registered");
+            }
+        }
         bridgePriorities[bridge] = priority;
         bridges.push(bridge);
+    }
+
+    // zero priority - bridge disabled
+    function setBridgePriority(address bridge, uint8 priority) external onlyRole(OPERATOR_ROLE) {
+        require(bridge != address(0), "GateKeeper: zero address");
+        bridgePriorities[bridge] = priority;
     }
 
     /**
@@ -217,7 +228,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
             bytes32 requestId;
             uint256 nonce;
             {
-                nonce = nonces[msg.sender]++;
+                nonce = ++nonces[msg.sender];
                 requestId = RequestIdLib.prepareRequestId(
                     castToBytes32(to),
                     chainIdTo,
@@ -312,12 +323,10 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         uint256[][] memory spentValue,
         bytes[] memory comissionLZ
     ) internal {
-        console.log('Send bridge:');
-        console.log(bridge);
         IBridgeV3(bridge).sendV3(
             params,
-            nonce,
             sender,
+            nonce,
             spentValue,
             comissionLZ
         );
