@@ -22,7 +22,17 @@ contract ReceiverLZ is OAppReceiver {
         require(receiver_ != address(0), "ReceiverLZ: zero address");
         receiver = receiver_;
     }
-
+    /**
+     * @dev Entry point for receiving messages or packets from the endpoint.
+     * @param origin_ The origin information containing the source endpoint and sender address.
+     *  - srcEid: The source chain endpoint ID.
+     *  - sender: The sender address on the src chain.
+     *  - nonce: The nonce of the message.
+     * @param guid_ The unique identifier for the received LayerZero message.
+     * @param message_ The payload of the received message.
+     * @param executor_ The address of the executor for the received message.
+     * @param extraData_ Additional arbitrary data provided by the corresponding executor.
+     */
     function _lzReceive(
         Origin calldata origin_,
         bytes32 guid_,

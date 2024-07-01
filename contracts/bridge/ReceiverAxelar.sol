@@ -19,6 +19,13 @@ contract ReceiverAxelar is AxelarExpressExecutable {
         receiver = receiver_;
     }
 
+    /**
+     * @dev Receive payload from Axelar bridge
+     * 
+     * @param sourceChain source chain
+     * @param sourceAddress  sender from source
+     * @param payload_ received payload
+     */
     function _execute(
         string calldata sourceChain,
         string calldata sourceAddress,
