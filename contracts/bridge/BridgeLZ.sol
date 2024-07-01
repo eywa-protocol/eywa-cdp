@@ -177,6 +177,14 @@ contract BridgeLZ is OAppSender, IBridgeV3, IBridgeLZ, AccessControlEnumerable, 
         );
     }
 
+    /**
+     * @dev Quote price for LZ bride
+     * 
+     * @param _dstEid destination chain id
+     * @param _data  data, which will be sent
+     * @param _options additional data
+     * @param _payInLzToken flag for chose token
+     */
     function quote(
         uint32 _dstEid,
         bytes memory _data,
