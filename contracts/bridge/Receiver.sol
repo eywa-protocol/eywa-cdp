@@ -7,7 +7,6 @@ import "@openzeppelin/contracts/utils/Address.sol";
 import "../interfaces/IReceiver.sol";
 import "../interfaces/IAddressBook.sol";
 
-
 contract Receiver is IReceiver, AccessControlEnumerable {
 
     using Address for address;
@@ -57,7 +56,7 @@ contract Receiver is IReceiver, AccessControlEnumerable {
         uint8 threshold_ = threshold[sender];
         require(threshold_ > 0, "Receiver: threshold is not set");
         bytes32 hash_ = keccak256(receivedData);
-        if (payloadThreshold[hash_] >= threshold_) {
+        if (payloadThreshold[hash_] + 1 >= threshold_) {
             _call(receivedData);
             delete payloadThreshold[hash_];
         } else {
@@ -66,7 +65,9 @@ contract Receiver is IReceiver, AccessControlEnumerable {
     }
 
     function receiveHashData(address sender, bytes32 receivedHash) external onlyRole(RECEIVER_ROLE) {
-        if (payload[receivedHash].length != 0 && payloadThreshold[receivedHash] >= threshold[sender]) {
+        uint8 threshold_ = threshold[sender];
+        require(threshold_ > 0, "Receiver: threshold is not set");
+        if (payload[receivedHash].length != 0 && payloadThreshold[receivedHash] + 2 >= threshold_) {
             _call(payload[receivedHash]);
             delete payload[receivedHash];
             delete payloadThreshold[receivedHash];

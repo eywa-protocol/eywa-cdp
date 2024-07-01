@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-// Copyright (c) Eywa.Fi, 2021-2023 - all rights reserved
+// Copyright (c) Eywa.Fi, 2021-2024 - all rights reserved
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/utils/Address.sol";
@@ -11,8 +11,6 @@ import "../interfaces/IBridgeLZ.sol";
 import "../interfaces/IAddressBook.sol";
 import "../interfaces/IReceiver.sol";
 import "../interfaces/INativeTreasury.sol";
-
-
 contract ReceiverLZ is OAppReceiver {
     
     address public receiver;
@@ -41,7 +39,6 @@ contract ReceiverLZ is OAppReceiver {
         bytes calldata extraData_
     ) internal override {
         address originSender = address(uint160(uint256(origin_.sender)));
-
         if (message_[message_.length - 1] == 0x01){
             (bytes32 payload, bool isHash) = abi.decode(message_, (bytes32, bool));
             IReceiver(receiver).receiveHashData(originSender, bytes32(payload));
