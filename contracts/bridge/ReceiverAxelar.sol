@@ -24,16 +24,15 @@ contract ReceiverAxelar is AxelarExpressExecutable {
         string calldata sourceAddress,
         bytes calldata payload_
     ) internal override {
-        address originSender = _convertStringToAddress(sourceAddress);
-        (bytes memory payload, bool isHash) = abi.decode(payload_, (bytes, bool));
-        if (isHash) {
+        address originSender = address(bytes20(bytes((sourceAddress))));
+        if (payload_[payload_.length - 1] == 0x01){
+            (bytes32 payload, bool isHash) = abi.decode(payload_, (bytes32, bool));
             IReceiver(receiver).receiveHashData(originSender, bytes32(payload));
-        } else {
+        } else if (payload_[payload_.length - 1] == 0x00) {
+            (bytes memory payload, bool isHash) = abi.decode(payload_, (bytes, bool));
             IReceiver(receiver).receiveData(originSender, payload);
+        } else {
+            revert("ReceiverAxelar: wrong message");
         }
-    }
-
-    function _convertStringToAddress(string memory str) private returns(address) {
-        return address(bytes20(bytes(str)));
     }
 }

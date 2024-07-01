@@ -31,11 +31,15 @@ contract ReceiverLZ is OAppReceiver {
         bytes calldata extraData_
     ) internal override {
         address originSender = address(uint160(uint256(origin_.sender)));
-        (bytes memory payload, bool isHash) = abi.decode(message_, (bytes, bool));
-        if (isHash){
+
+        if (message_[message_.length - 1] == 0x01){
+            (bytes32 payload, bool isHash) = abi.decode(message_, (bytes32, bool));
             IReceiver(receiver).receiveHashData(originSender, bytes32(payload));
-        } else {
+        } else if (message_[message_.length - 1] == 0x00) {
+            (bytes memory payload, bool isHash) = abi.decode(message_, (bytes, bool));
             IReceiver(receiver).receiveData(originSender, payload);
+        } else {
+            revert("ReceiverLZ: wrong message");
         }
     }
 }

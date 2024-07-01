@@ -8,6 +8,7 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "../interfaces/IBridgeV2.sol";
 import "../interfaces/IBridgeV3.sol";
 import "../interfaces/IReceiver.sol";
+import "../interfaces/IGateKeeper.sol";
 import "../utils/Block.sol";
 import "../utils/Bls.sol";
 import "../utils/Merkle.sol";
@@ -153,11 +154,13 @@ contract BridgeV2 is IBridgeV2, IBridgeV3, AccessControlEnumerable, Typecast, Re
     function sendV3(
         SendParams calldata params,
         address sender,
+        address payToken,
         uint256 nonce,
         uint256[][] memory spentValue,
         bytes[] memory comission
-    ) external payable onlyRole(GATEKEEPER_ROLE) returns (bool) {
+    ) external payable onlyRole(GATEKEEPER_ROLE) returns (uint256) {
         sendV2(params,sender, nonce);
+        return IGateKeeper(msg.sender).calculateCost(payToken, params.data.length, uint64(params.chainIdTo), sender);
     }
 
     /**
@@ -201,12 +204,14 @@ contract BridgeV2 is IBridgeV2, IBridgeV3, AccessControlEnumerable, Typecast, Re
             string memory err;
             
             if (isRequestIdUniq) {
-                bool isHash;
-                (payload, isHash) = abi.decode(receivedData, (bytes, bool));
-                if (isHash){
-                    IReceiver(receiver).receiveHashData(address(this), bytes32(payload));
+                if (payload[payload.length - 1] == 0x01){
+                    (bytes32 payload_, bool isHash) = abi.decode(payload, (bytes32, bool));
+                    IReceiver(receiver).receiveHashData(address(this), bytes32(payload_));
+                } else if (payload[payload.length - 1] == 0x00) {
+                    (bytes memory payload_, bool isHash) = abi.decode(payload, (bytes, bool));
+                    IReceiver(receiver).receiveData(address(this), payload_);
                 } else {
-                    IReceiver(receiver).receiveData(address(this), payload);
+                    revert("Bridge: wrong message");
                 }
             } else {
                 revert("Bridge: request id already seen");

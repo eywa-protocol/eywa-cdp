@@ -9,9 +9,10 @@ interface IBridgeV3 {
     function sendV3(
         IBridgeV2.SendParams memory params,
         address sender,
+        address payToken,
         uint256 nonce,
         uint256[][] memory spentValue,
         bytes[] memory comissionLZ
-    ) external payable returns (bool);
+    ) external payable returns (uint256);
 
 }

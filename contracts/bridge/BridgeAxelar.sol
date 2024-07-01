@@ -110,11 +110,13 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, IBridgeAxelar, Acce
     function sendV3(
         IBridgeV2.SendParams calldata params,
         address sender,
+        address payToken,
         uint256 nonce,
         uint256[][] memory spentValue,
         bytes[] memory comission
-    ) public payable override onlyRole(GATEKEEPER_ROLE) returns (bool) {
+    ) public payable override onlyRole(GATEKEEPER_ROLE) returns (uint256) {
         _send(params.data, uint64(params.chainIdTo), spentValue, comission);
+        return spentValue[spentValue.length - 1][0];
     }
 
     /**

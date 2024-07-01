@@ -13,7 +13,6 @@ import "../interfaces/IBridgeV2.sol";
 import "../interfaces/IGateKeeper.sol";
 import "../interfaces/IAddressBook.sol";
 import "../interfaces/IValidatedDataReciever.sol";
-
 contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, ReentrancyGuard {
     using Address for address;
 
@@ -37,7 +36,6 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
 
     /// @dev operator role id
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
-
     /// @dev chainId => pay token => base fees
     mapping(uint64 => mapping(address => uint256)) public baseFees;
     /// @dev chainId => pay token => rate (per byte)
@@ -46,17 +44,14 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     mapping(address => uint256) public discounts;
     /// @dev nonce for senders
     mapping(address => uint256) public nonces;
-
     // @dev brdige => priority, 1 higher than 10, 0 priority turns off the bridge
     mapping(address => uint8) public bridgePriorities;   
     // @dev rigistered bridges
     address[] public bridges;
     // @dev treasury for native value
     address public treasury;
-    
     /// @dev protocol -> threshold
     mapping(address => uint8) public threshold;
-    
 
     event CrossChainCallPaid(address indexed sender, address indexed token, uint256 transactionCost);
     event BridgeSet(address bridge);
@@ -66,7 +61,6 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     event FeesWithdrawn(address token, uint256 amount, address to);
     event PrioritySet(address bridge, uint8 priority);
     event TreasurySet(address treasury);
-
 
     constructor(address treasury_) {
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
@@ -224,40 +218,41 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         payable(treasury).transfer(msg.value);
         address[] memory selectedBridges = _selectBridgesByPriority(threshold[msg.sender]);
         bytes memory out;
+        bytes32 requestId;
+        uint256 nonce;
+        bytes memory collectedData;
+        {
+            nonce = ++nonces[msg.sender];
+            requestId = RequestIdLib.prepareRequestId(
+                castToBytes32(to),
+                chainIdTo,
+                castToBytes32(msg.sender),
+                block.chainid,
+                nonce
+            );
+            bytes memory info = abi.encodeWithSelector(
+                IValidatedDataReciever.receiveValidatedData.selector,
+                bytes4(data[:4]),
+                msg.sender,
+                block.chainid
+            );
+            collectedData = abi.encode(
+                abi.encode(data, _popValues(spentValue), _popCommissions(comissionLZ)), 
+                info, 
+                nonce, 
+                to
+            );
+        }
+        uint256 totalCost;
         for (uint8 i; i < selectedBridges.length; ++i) {
-            bytes32 requestId;
-            uint256 nonce;
-            {
-                nonce = ++nonces[msg.sender];
-                requestId = RequestIdLib.prepareRequestId(
-                    castToBytes32(to),
-                    chainIdTo,
-                    castToBytes32(msg.sender),
-                    block.chainid,
-                    nonce
-                );
-                bytes memory info = abi.encodeWithSelector(
-                    IValidatedDataReciever.receiveValidatedData.selector,
-                    bytes4(data[:4]),
-                    msg.sender,
-                    block.chainid
-                );
-                bytes memory collectedData = abi.encode(
-                    abi.encode(data, _popValues(spentValue), _popCommissions(comissionLZ)), 
-                    info, 
-                    nonce, 
-                    to
-                );
-                if (i == 0) {
-                    bool isHash = false;
-                    out = abi.encode(collectedData, isHash);
-                } else {
-                    bool isHash = true;
-                    out = abi.encode(keccak256(collectedData), isHash);
-                }
+            if (i == 0) {
+                bool isHash = false;
+                out = abi.encode(collectedData, isHash);
+            } else {
+                bool isHash = true;
+                out = abi.encode(keccak256(collectedData), isHash);
             }
-
-            _sendCustomBridge(
+            totalCost += _sendCustomBridge(
                 selectedBridges[i], 
                 IBridgeV2.SendParams({
                         requestId: requestId,
@@ -267,14 +262,12 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
                 }), 
                 nonce,
                 msg.sender,
+                payToken,
                 spentValue, 
                 comissionLZ
             );
-            
         }
-
-        uint256 spentValueEywa = calculateCost(payToken, out.length, chainIdTo, msg.sender);
-        _proceedCrosschainFees(payToken, spentValueEywa, spentValue);
+        _proceedCrosschainFees(payToken, totalCost);
     }
 
     /**
@@ -320,12 +313,14 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         IBridgeV2.SendParams memory params,
         uint256 nonce,
         address sender,
+        address payToken,
         uint256[][] memory spentValue,
         bytes[] memory comissionLZ
-    ) internal {
-        IBridgeV3(bridge).sendV3(
+    ) internal returns(uint256) {
+        return IBridgeV3(bridge).sendV3(
             params,
             sender,
+            payToken,
             nonce,
             spentValue,
             comissionLZ
@@ -355,15 +350,9 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
      * @notice Proceeds with cross-chain fees payment in the specified token.
      *
      * @param payToken The address of the token to be used for fee payment.
-     * @param transactionCostEywa The amount of fees to be paid for the cross-chain operation.
-     * @param spentValue Value that can spend each bridge.
+     * @param totalCost The amount of fees to be paid for the cross-chain operation.
      */
-    function _proceedCrosschainFees(address payToken, uint256 transactionCostEywa, uint256[][] memory spentValue) private {
-        uint256 lastIndex = spentValue.length - 1;
-        uint256 transactionCostLZ = spentValue[lastIndex][1];
-        uint256 transactionCostAxelar = spentValue[lastIndex][0];
-
-        uint256 totalCost = transactionCostEywa + transactionCostLZ + transactionCostAxelar;
+    function _proceedCrosschainFees(address payToken, uint256 totalCost) private {
         emit CrossChainCallPaid(msg.sender, payToken, totalCost);
         if (payToken == address(0)) {
             require(msg.value >= totalCost, "GateKeeper: invalid payment amount");
@@ -371,5 +360,4 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
             SafeERC20.safeTransferFrom(IERC20(payToken), msg.sender, address(this), totalCost);
         }
     }
-
 }

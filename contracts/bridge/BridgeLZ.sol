@@ -108,10 +108,11 @@ contract BridgeLZ is OAppSender, IBridgeV3, IBridgeLZ, AccessControlEnumerable, 
     function sendV3(
         IBridgeV2.SendParams calldata params,
         address sender,
+        address payToken,
         uint256 nonce,
         uint256[][] memory spentValue,
         bytes[] memory comission
-    ) public payable override onlyRole(GATEKEEPER_ROLE) returns (bool) {
+    ) public payable override onlyRole(GATEKEEPER_ROLE) returns (uint256) {
         if (msg.value > 0) {
             _send(params.data, uint64(params.chainIdTo), spentValue, comission);
         } else {
@@ -127,6 +128,7 @@ contract BridgeLZ is OAppSender, IBridgeV3, IBridgeLZ, AccessControlEnumerable, 
                 comission
             );
         }
+        return spentValue[spentValue.length - 1][1];
     }
     /**
      * @dev Call _send from treasury adress with msg.value
