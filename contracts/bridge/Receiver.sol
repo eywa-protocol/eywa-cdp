@@ -15,7 +15,6 @@ contract Receiver is IReceiver, AccessControlEnumerable {
     bytes32 public constant RECEIVER_ROLE = keccak256("RECEIVER_ROLE");
     /// @dev operator role id
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
-
     /// @dev hash -> receives count
     mapping(bytes32 => uint8) public payloadThreshold;
     /// @dev hash -> data
@@ -52,6 +51,12 @@ contract Receiver is IReceiver, AccessControlEnumerable {
         receiversCount = receiversCount_;
     }
 
+    /**
+     * @dev Receive full data
+     * 
+     * @param sender Source sender
+     * @param receivedData Received data
+     */
     function receiveData(address sender, bytes memory receivedData) external onlyRole(RECEIVER_ROLE) {
         uint8 threshold_ = threshold[sender];
         require(threshold_ > 0, "Receiver: threshold is not set");
@@ -64,6 +69,12 @@ contract Receiver is IReceiver, AccessControlEnumerable {
         }
     }
 
+    /**
+     * @dev Receive hash of data
+     * 
+     * @param sender Source sende
+     * @param receivedHash Received hash
+     */
     function receiveHashData(address sender, bytes32 receivedHash) external onlyRole(RECEIVER_ROLE) {
         uint8 threshold_ = threshold[sender];
         require(threshold_ > 0, "Receiver: threshold is not set");
@@ -77,6 +88,11 @@ contract Receiver is IReceiver, AccessControlEnumerable {
         }
     }
 
+    /**
+     * @dev Make two calls to executor contract. First for check, second for execute.
+     * 
+     * @param receivedData data, which fill be decoded and executed
+     */
     function _call(bytes memory receivedData) internal {
         (
             bytes memory dataWithSpendings,

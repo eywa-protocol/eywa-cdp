@@ -30,7 +30,6 @@ contract BridgeLZ is OAppSender, IBridgeV3, IBridgeLZ, AccessControlEnumerable, 
     mapping(uint64 => uint32) public dstEids;
     /// @dev dstEid => chainIdTo
     mapping(uint32 => uint64) public chainIds;
-
     /// @dev native treasury address
     address public treasury;
 

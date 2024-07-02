@@ -8,7 +8,8 @@ import "../interfaces/INativeTreasury.sol";
 
 
 contract NativeTreasury is INativeTreasury, AccessControlEnumerable  {
-
+    
+    /// @dev bridge role id
     bytes32 public constant BRIDGE_ROLE = keccak256("BRIDGE_ROLE");
 
     event ValueSent(uint256 value, address to);

@@ -13,6 +13,7 @@ import "../../interfaces/IReceiver.sol";
 import "../../interfaces/INativeTreasury.sol";
 contract ReceiverLZ is OAppReceiver {
     
+    /// @dev address of main receiver, that stores data and hashes
     address public receiver;
     constructor(address endpoint_, address owner_, address receiver_) OAppCore(endpoint_, owner_) {
         require(endpoint_ != address(0), "ReceiverLZ: zero address");
