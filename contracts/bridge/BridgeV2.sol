@@ -5,15 +5,15 @@ pragma solidity ^0.8.17;
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "../../interfaces/IBridgeV2.sol";
-import "../../interfaces/IBridgeV3.sol";
-import "../../interfaces/IReceiver.sol";
-import "../../interfaces/IGateKeeper.sol";
-import "../../utils/Block.sol";
-import "../../utils/Bls.sol";
-import "../../utils/Merkle.sol";
-import "../../utils/RequestIdChecker.sol";
-import "../../utils/Typecast.sol";
+import "../interfaces/IBridgeV2.sol";
+import "../interfaces/IBridgeV3.sol";
+import "../interfaces/IReceiver.sol";
+import "../interfaces/IGateKeeper.sol";
+import "../utils/Block.sol";
+import "../utils/Bls.sol";
+import "../utils/Merkle.sol";
+import "../utils/RequestIdChecker.sol";
+import "../utils/Typecast.sol";
 
 
 contract BridgeV2 is IBridgeV2, IBridgeV3, AccessControlEnumerable, Typecast, ReentrancyGuard {

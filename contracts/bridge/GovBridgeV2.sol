@@ -2,7 +2,7 @@
 // Copyright (c) Eywa.Fi, 2021-2023 - all rights reserved
 pragma solidity ^0.8.17;
 
-import "./send/BridgeV2.sol";
+import "./BridgeV2.sol";
 
 
 contract GovBridgeV2 is BridgeV2 {
