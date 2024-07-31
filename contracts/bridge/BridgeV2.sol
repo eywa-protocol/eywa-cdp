@@ -154,13 +154,12 @@ contract BridgeV2 is IBridgeV2, IBridgeV3, AccessControlEnumerable, Typecast, Re
     function sendV3(
         SendParams calldata params,
         address sender,
-        address payToken,
         uint256 nonce,
         uint256[][] memory spentValue,
         bytes[] memory comission
     ) external payable onlyRole(GATEKEEPER_ROLE) returns (uint256) {
         sendV2(params,sender, nonce);
-        return IGateKeeper(msg.sender).calculateCost(payToken, params.data.length, uint64(params.chainIdTo), sender);
+        return IGateKeeper(msg.sender).calculateCost(address(0), params.data.length, uint64(params.chainIdTo), sender);
     }
 
     /**

@@ -16,7 +16,6 @@ interface IGateKeeper {
         bytes calldata data,
         address to,
         uint64 chainIdTo,
-        address payToken,
         uint256[][] memory spentValue,
         bytes[] memory comission
     ) external payable;

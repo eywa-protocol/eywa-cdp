@@ -202,7 +202,6 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
      * @param data The data (encoded with selector) which would be send to the destination contract;
      * @param to The address of the destination contract;
      * @param chainIdTo The ID of the chain where the destination contract resides;
-     * @param payToken The address of the ERC20 token used to pay the fee or address(0) if Ether is used.
      * @param spentValue  Values that will be spent during cross-chain [ [AxelarValueHUB, LZValueHUB], [AxelarValueSOURCE, LZValueSOURCE] ]
      * @param comissionLZ  Gas commision for execution in other chains [LZCommissionHUB, LZCommissionSOURCE]
      */
@@ -210,7 +209,6 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         bytes calldata data,
         address to,
         uint64 chainIdTo,
-        address payToken,
         uint256[][] memory spentValue,
         bytes[] memory comissionLZ
     ) external payable nonReentrant {
@@ -262,12 +260,11 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
                 }), 
                 nonce,
                 msg.sender,
-                payToken,
                 spentValue, 
                 comissionLZ
             );
         }
-        _proceedCrosschainFees(payToken, totalCost);
+        require(msg.value >= totalCost, "GateKeeper: invalid payment amount");
     }
 
     /**
@@ -313,14 +310,12 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         IBridgeV2.SendParams memory params,
         uint256 nonce,
         address sender,
-        address payToken,
         uint256[][] memory spentValue,
         bytes[] memory comissionLZ
     ) internal returns(uint256) {
         return IBridgeV3(bridge).sendV3(
             params,
             sender,
-            payToken,
             nonce,
             spentValue,
             comissionLZ
@@ -343,21 +338,6 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         newCommissions = new bytes[](commissionsLength - 1);
         for (uint8 i; i < commissionsLength - 1; ++i) {
             newCommissions[i] = commissions[i];
-        }
-    }
-
-    /**
-     * @notice Proceeds with cross-chain fees payment in the specified token.
-     *
-     * @param payToken The address of the token to be used for fee payment.
-     * @param totalCost The amount of fees to be paid for the cross-chain operation.
-     */
-    function _proceedCrosschainFees(address payToken, uint256 totalCost) private {
-        emit CrossChainCallPaid(msg.sender, payToken, totalCost);
-        if (payToken == address(0)) {
-            require(msg.value >= totalCost, "GateKeeper: invalid payment amount");
-        } else {
-            SafeERC20.safeTransferFrom(IERC20(payToken), msg.sender, address(this), totalCost);
         }
     }
 }
