@@ -4,19 +4,20 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
+import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "../interfaces/IReceiver.sol";
 import "../interfaces/IAddressBook.sol";
-
 contract Receiver is IReceiver, AccessControlEnumerable {
 
     using Address for address;
+    using EnumerableSet for EnumerableSet.AddressSet;
 
     /// @dev bridge role id
     bytes32 public constant RECEIVER_ROLE = keccak256("RECEIVER_ROLE");
     /// @dev operator role id
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
-    /// @dev hash -> receives count
-    mapping(bytes32 => uint8) public payloadThreshold;
+    /// @dev hash -> receiver's addresses from where hash received
+    mapping(bytes32 => EnumerableSet.AddressSet) internal _payloadThreshold;
     /// @dev hash -> data
     mapping(bytes32 => bytes) public payload;
     /// @dev protocol -> threshold
@@ -61,11 +62,14 @@ contract Receiver is IReceiver, AccessControlEnumerable {
         uint8 threshold_ = threshold[sender];
         require(threshold_ > 0, "Receiver: threshold is not set");
         bytes32 hash_ = keccak256(receivedData);
-        if (payloadThreshold[hash_] + 1 >= threshold_) {
+        require(!_payloadThreshold[hash_].contains(msg.sender), "Receiver: already received");
+        if (_payloadThreshold[hash_].length() + 1 >= threshold_) {
             _call(receivedData);
-            delete payloadThreshold[hash_];
+            _eraseEnumerableSet(_payloadThreshold[hash_]);
+            delete _payloadThreshold[hash_];
         } else {
             payload[hash_] = receivedData;
+            _payloadThreshold[hash_].add(msg.sender);
         }
     }
 
@@ -78,14 +82,20 @@ contract Receiver is IReceiver, AccessControlEnumerable {
     function receiveHashData(address sender, bytes32 receivedHash) external onlyRole(RECEIVER_ROLE) {
         uint8 threshold_ = threshold[sender];
         require(threshold_ > 0, "Receiver: threshold is not set");
-        if (payload[receivedHash].length != 0 && payloadThreshold[receivedHash] + 2 >= threshold_) {
+        require(!_payloadThreshold[receivedHash].contains(msg.sender), "Receiver: already received");
+        if (payload[receivedHash].length != 0 && _payloadThreshold[receivedHash].length() + 1 >= threshold_) {
             _call(payload[receivedHash]);
             delete payload[receivedHash];
-            delete payloadThreshold[receivedHash];
+            _eraseEnumerableSet(_payloadThreshold[receivedHash]);
+            delete _payloadThreshold[receivedHash];
         }
         else {
-            payloadThreshold[receivedHash]++;
+            _payloadThreshold[receivedHash].add(msg.sender);
         }
+    }
+
+    function payloadThreshold(bytes32 hash_) public view returns (address[] memory) {
+        return _payloadThreshold[hash_].values();
     }
 
     /**
@@ -100,9 +110,14 @@ contract Receiver is IReceiver, AccessControlEnumerable {
             uint256 nonce,
             address executor
         ) = abi.decode(receivedData, (bytes, bytes, uint256, address));
-
         bytes memory result = executor.functionCall(check);
         require(abi.decode(result, (bool)), "Receiver: check failed");
         executor.functionCall(dataWithSpendings, "Receiver: receive failed");
+    }
+
+    function _eraseEnumerableSet(EnumerableSet.AddressSet storage set) internal {
+        for (uint256 i = set.length(); i > 0; i--) {
+            set.remove(set.at(i - 1));
+        }
     }
 }
