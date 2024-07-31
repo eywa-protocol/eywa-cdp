@@ -58,7 +58,7 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, IBridgeAxelar, Acce
      * @param chainIdTo_ Chain ID to send
      * @param network_ Network name of chain
      */
-    function setDestinationNetwork(uint64 chainIdTo_, string memory network_) external {
+    function setDestinationNetwork(uint64 chainIdTo_, string memory network_) external onlyRole(OPERATOR_ROLE) {
         networkById[chainIdTo_] = network_;
         chainIds[network_] = chainIdTo_;
         emit NetworkSet(chainIdTo_, network_);
@@ -69,7 +69,7 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, IBridgeAxelar, Acce
      * 
      * @param chainIdTo_ Chain ID of receiver
      */
-    function setReceiver(uint64 chainIdTo_, address receiver_) external {
+    function setReceiver(uint64 chainIdTo_, address receiver_) external onlyRole(OPERATOR_ROLE) {
         receivers[chainIdTo_] = receiver_;
         emit ReceiverSet(chainIdTo_, receiver_);
     }
