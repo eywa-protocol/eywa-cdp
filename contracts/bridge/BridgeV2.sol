@@ -56,6 +56,7 @@ contract BridgeV2 is IBridgeV2, IBridgeV3, AccessControlEnumerable, Typecast, Re
     event RequestReceived(bytes32 requestId, string error);
 
     event StateSet(State state);
+    event ReceiverSet(address receiver);
 
     constructor() {
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
@@ -232,6 +233,19 @@ contract BridgeV2 is IBridgeV2, IBridgeV3, AccessControlEnumerable, Typecast, Re
     function setState(State state_) external onlyRole(OPERATOR_ROLE) {
         state = state_;
         emit StateSet(state);
+    }
+
+    /**
+     * @dev Set new receiver.
+     *
+     * Controlled by operator.
+     *
+     * @param receiver_ Receiver address
+     */
+    function setReceiver(address receiver_) external onlyRole(OPERATOR_ROLE) {
+        require(receiver_ != address(0), "BridgeV2: zero address");
+        receiver = receiver_;
+        emit ReceiverSet(receiver_);
     }
 
     /**
