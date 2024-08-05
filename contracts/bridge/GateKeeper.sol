@@ -15,7 +15,6 @@ import "../interfaces/IAddressBook.sol";
 import "../interfaces/IValidatedDataReciever.sol";
 import { INativeTreasuryFactory } from '../interfaces/INativeTreasuryFactory.sol';
 import { INativeTreasury } from  "../interfaces/INativeTreasury.sol";
-
 contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, ReentrancyGuard {
     using Address for address;
 
@@ -57,6 +56,8 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     address public treasuryFactory;
     /// @dev protocol -> threshold
     mapping(address => uint8) public threshold;
+    /// @dev msg.sender -> nonce -> hash of data
+    mapping(address => mapping(uint256 => bytes32)) public sendedData;
 
     event CrossChainCallPaid(address indexed sender, address indexed token, uint256 transactionCost);
     event BridgeSet(address bridge);
@@ -145,6 +146,42 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         require(baseFee != 0, "GateKeeper: base fee not set");
         require(rate != 0, "GateKeeper: rate not set");
         (amountToPay) = _getPercentValues(baseFee + (dataLength * rate), discounts[caller]);
+    }
+
+    function retry(
+        IBridgeV2.SendParams memory params,
+        uint256 nonce,
+        address sender,
+        address bridge,
+        bytes memory currentOptions,
+        bool isHash
+        ) external payable {
+        require(sendedData[sender][nonce] == keccak256(abi.encode(
+            params,
+            nonce,
+            sender
+        )), "GateKeeper: wrong data");
+
+        if (isHash) {
+            params.data = abi.encode(keccak256(params.data), isHash);
+        } else {
+            params.data = abi.encode(params.data, isHash);
+        }
+
+        uint256 gasFee = IBridgeV3(bridge).estimateGasFee(
+            params,
+            sender,
+            currentOptions
+        );
+        IBridgeV3(bridge).sendV3{value: gasFee}(
+            params,
+            sender,
+            nonce,
+            currentOptions
+        );
+        if (msg.value > gasFee) {
+            payable(msg.sender).transfer(msg.value - gasFee);
+        }
     }
 
     /**
@@ -258,6 +295,16 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
                 nonce, 
                 to
             );
+            sendedData[msg.sender][nonce] = keccak256(abi.encode(
+                IBridgeV2.SendParams({
+                        requestId: requestId,
+                        data: abi.encode(data, nextOptions),
+                        to: to,
+                        chainIdTo: chainIdTo
+                }), 
+                nonce,
+                msg.sender
+            ));
         }
         uint256 totalCost;
         for (uint8 i; i < selectedBridges.length; ++i) {
