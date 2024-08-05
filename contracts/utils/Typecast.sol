@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 // Copyright (c) Eywa.Fi, 2021-2023 - all rights reserved
-pragma solidity 0.8.17;
+pragma solidity ^0.8.20;
 
 abstract contract Typecast {
     function castToAddress(bytes32 x) public pure returns (address) {

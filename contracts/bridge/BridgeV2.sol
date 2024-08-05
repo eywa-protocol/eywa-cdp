@@ -156,10 +156,16 @@ contract BridgeV2 is IBridgeV2, IBridgeV3, AccessControlEnumerable, Typecast, Re
         SendParams calldata params,
         address sender,
         uint256 nonce,
-        uint256[][] memory spentValue,
-        bytes[] memory comission
-    ) external payable onlyRole(GATEKEEPER_ROLE) returns (uint256) {
+        bytes memory options
+    ) external payable onlyRole(GATEKEEPER_ROLE) {
         sendV2(params,sender, nonce);
+    }
+
+    function estimateGasFee(
+        SendParams calldata params,
+        address sender,
+        bytes memory options
+    ) public view returns (uint256) {
         return IGateKeeper(msg.sender).calculateCost(address(0), params.data.length, uint64(params.chainIdTo), sender);
     }
 

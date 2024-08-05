@@ -6,7 +6,6 @@ import "@openzeppelin/contracts/utils/Strings.sol";
 import { AxelarExpressExecutable } from "@axelar-network/axelar-gmp-sdk-solidity/contracts/express/AxelarExpressExecutable.sol";
 import { StringToAddress, AddressToString } from "@axelar-network/axelar-gmp-sdk-solidity/contracts/libs/AddressString.sol";
 import "../../interfaces/IReceiver.sol";
-import "../../interfaces/IBridgeAxelar.sol";
 import "../../interfaces/IAddressBook.sol";
 
 

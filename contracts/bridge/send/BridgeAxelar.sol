@@ -10,14 +10,13 @@ import { AxelarExecutable } from "@axelar-network/axelar-gmp-sdk-solidity/contra
 import { AxelarExpressExecutable } from "@axelar-network/axelar-gmp-sdk-solidity/contracts/express/AxelarExpressExecutable.sol";
 import { IAxelarGateway } from "@axelar-network/axelar-gmp-sdk-solidity/contracts/interfaces/IAxelarGateway.sol";
 import { IAxelarGasService } from "@axelar-network/axelar-gmp-sdk-solidity/contracts/interfaces/IAxelarGasService.sol";
+import { IGateKeeper } from "../../interfaces/IGateKeeper.sol";
 import "../../interfaces/IBridgeV3.sol";
 import "../../interfaces/IBridgeV2.sol";
-import "../../interfaces/IBridgeAxelar.sol";
 import "../../interfaces/INativeTreasury.sol";
 
 
-
-contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, IBridgeAxelar, AccessControlEnumerable, ReentrancyGuard {
+contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, AccessControlEnumerable, ReentrancyGuard {
     
     using Address for address;
     
@@ -31,17 +30,12 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, IBridgeAxelar, Acce
     mapping(address => uint256) public nonces;
     /// @dev chainIdTo => dstEid
     mapping(uint64 => string) public networkById;
-    /// @dev dstEid => chainIdTo
-    mapping(string => uint64) public chainIds;
     /// @dev chainIdTo => receiver
     mapping (uint64 => address) public receivers;
     /// @dev Axelar gas service
     IAxelarGasService public immutable gasService;
-    /// @dev native treasury address
-    address public treasury;
 
     event StateSet(IBridgeV2.State state);
-    event TreasurySet(address treasury);
     event NetworkSet(uint64 chainIdTo, string network);
     event ReceiverSet(uint64 chainIdTo, address receiver);
 
@@ -60,7 +54,6 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, IBridgeAxelar, Acce
      */
     function setDestinationNetwork(uint64 chainIdTo_, string memory network_) external onlyRole(OPERATOR_ROLE) {
         networkById[chainIdTo_] = network_;
-        chainIds[network_] = chainIdTo_;
         emit NetworkSet(chainIdTo_, network_);
     }
 
@@ -87,17 +80,51 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, IBridgeAxelar, Acce
     }
 
     /**
-     * @dev Set new treasury.
-     *
-     * Controlled by operator.
-     *
-     * @param treasury_ New treasury address
+     * @notice Estimate gas for a cross-chain contract call
+     * @param destinationChain_ name of the dest chain
+     * @param destinationAddress_ address on dest chain this tx is going to
+     * @param payload_ message to be sent
+     * @param gasLimit_ message to be sent
+     * @param params_ message to be sent
+     * @return gasEstimate The cross-chain gas estimate
      */
-    function setTreasury(address treasury_) external onlyRole(OPERATOR_ROLE) {
-        require(treasury_ != address(0), "BridgeAxelar: zero address");
-        treasury = treasury_;
-        emit TreasurySet(treasury_);
+    function quote(
+        string memory destinationChain_,
+        string memory destinationAddress_,
+        bytes memory payload_,
+        uint256 gasLimit_,
+        bytes memory params_
+    ) public view returns (uint256) {
+        return gasService.estimateGasFee(
+            destinationChain_,
+            destinationAddress_,
+            payload_,
+            gasLimit_,
+            params_
+        );
     }
+
+    function estimateGasFee(
+        IBridgeV2.SendParams calldata params,
+        address sender,
+        bytes memory options_
+    ) public view returns (uint256) {
+        (
+            string memory destinationChain,
+            string memory destinationAddress,
+            uint256 gasLimit,
+            bytes memory options
+        ) = _unpackParams(params, options_);
+
+        return gasService.estimateGasFee(
+            destinationChain,
+            destinationAddress,
+            params.data,
+            gasLimit,
+            options
+        );
+    }
+    
 
     // /**
     //  * @dev Send data to receiver in chainIdTo
@@ -111,49 +138,69 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, IBridgeAxelar, Acce
         IBridgeV2.SendParams calldata params,
         address sender,
         uint256 nonce,
-        uint256[][] memory spentValue,
-        bytes[] memory comission
-    ) public payable override onlyRole(GATEKEEPER_ROLE) returns (uint256) {
-        _send(params.data, uint64(params.chainIdTo), spentValue, comission);
-        return spentValue[spentValue.length - 1][0];
+        bytes memory options
+    ) public payable override onlyRole(GATEKEEPER_ROLE) {
+        _send(params, sender, options);
     }
 
-    /**
-     * @dev Send data to receiver in chainIdTo
-     * 
-     * @param data  data, which will be sent
-     * @param chainIdTo  destination chain id 
-     * @param spentValue value which will be spent for axelar delivery
-     * @param commission gas and eth value for destination execution
-     */
+    // /**
+    //  * @dev Send data to receiver in chainIdTo
+    //  * 
+    //  * @param data  data, which will be sent
+    //  * @param chainIdTo_  destination chain id 
+    //  */
     function _send(
-        bytes memory data,
-        uint64 chainIdTo,
-        uint256[][] memory spentValue,
-        bytes[] memory commission
+        IBridgeV2.SendParams calldata params,
+        address sender,
+        bytes memory options_
     ) internal returns (bool) {
         require(state == IBridgeV2.State.Active, "BridgeAxelar: state inactive");
 
-        string memory chainId = networkById[chainIdTo];
-        string memory destinationAddress = Strings.toHexString(uint160(receivers[chainIdTo]), 20);
+        (
+            string memory destinationChain,
+            string memory destinationAddress,
+            uint256 gasLimit,
+            bytes memory options
+        ) = _unpackParams(params, options_);
+        _payGas(destinationChain, destinationAddress, params.data, gasLimit, sender, options);
 
-        uint256 valuesLength = spentValue.length;
-        uint256 valueAxelar = spentValue[valuesLength - 1][0];
+        gateway.callContract(
+            destinationChain,
+            destinationAddress,
+            params.data
+        );
+    }
 
-        INativeTreasury(treasury).getValue(valueAxelar);
+    function _unpackParams(IBridgeV2.SendParams calldata params, bytes memory options_) internal view
+        returns(
+            string memory destinationChain,
+            string memory destinationAddress,
+            uint256 gasLimit,
+            bytes memory options
+        ) {
+            uint64 chainIdTo = uint64(params.chainIdTo);
+            destinationChain = networkById[chainIdTo];
+            destinationAddress = Strings.toHexString(uint160(receivers[chainIdTo]), 20);
+            (gasLimit, options) = abi.decode(options_, (uint256, bytes));
+        }
 
-        gasService.payNativeGasForContractCall{value: valueAxelar} (
+    function _payGas(
+        string memory chainId,
+        string memory destinationAddress,
+        bytes memory data,
+        uint256 gasLimit,
+        address sender,
+        bytes memory params
+    ) internal {
+        gasService.payGas{value: msg.value} (
             address(this),
             chainId,
             destinationAddress,
             data,
-            treasury
-        );
-
-        gateway.callContract(
-            chainId,
-            destinationAddress,
-            data
+            gasLimit,
+            false,
+            sender,
+            params
         );
     }
 

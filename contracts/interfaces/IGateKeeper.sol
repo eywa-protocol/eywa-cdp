@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 // Copyright (c) Eywa.Fi, 2021-2024 - all rights reserved
-pragma solidity 0.8.17;
-
+pragma solidity ^0.8.20;
 
 interface IGateKeeper {
 
@@ -10,14 +9,15 @@ interface IGateKeeper {
         uint256 dataLength,
         uint64 chainIdTo,
         address sender
-    ) external returns (uint256 amountToPay);
+    ) external view returns (uint256 amountToPay);
 
     function sendData(
         bytes calldata data,
         address to,
         uint64 chainIdTo,
-        uint256[][] memory spentValue,
-        bytes[] memory comission
-    ) external payable;
+        bytes memory options
+    ) external;
 
+    function treasuries(address sender) external returns (address treasury);
+    function bridgePriorities(address bridge) external returns (uint8 priority);
 }

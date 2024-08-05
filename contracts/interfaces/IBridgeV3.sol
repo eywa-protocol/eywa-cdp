@@ -10,8 +10,13 @@ interface IBridgeV3 {
         IBridgeV2.SendParams memory params,
         address sender,
         uint256 nonce,
-        uint256[][] memory spentValue,
-        bytes[] memory comissionLZ
-    ) external payable returns (uint256);
+        bytes memory options
+    ) external payable;
+
+    function estimateGasFee(
+        IBridgeV2.SendParams memory  params,
+        address sender,
+        bytes memory options
+    ) external returns (uint256);
 
 }

@@ -2,39 +2,28 @@
 // Copyright (c) Eywa.Fi, 2021-2023 - all rights reserved
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
-import "../interfaces/IBridgeLZ.sol";
+import { AccessControlEnumerable } from "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
+import { Initializable } from '@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol';
 import "../interfaces/INativeTreasury.sol";
+import "../interfaces/IGateKeeper.sol";
 
-
-contract NativeTreasury is INativeTreasury, AccessControlEnumerable  {
+contract NativeTreasury is INativeTreasury, AccessControlEnumerable, Initializable  {
     
     /// @dev bridge role id
     bytes32 public constant BRIDGE_ROLE = keccak256("BRIDGE_ROLE");
 
+    address public gateKeeper;
     event ValueSent(uint256 value, address to);
 
     constructor() {
-        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _disableInitializers();
     }
     
-    /**
-     * @dev Make call with value to msg.sender, for LZ bridge
-     * 
-     * @param value_ value to call
-     * @param data  data, which will be sent
-     * @param chainIdTo  destination chain id 
-     * @param spentValue value which will be spent for axelar delivery
-     * @param commission gas and eth value for destination execution
-     */
-    function callFromTreasury(
-        uint256 value_,
-        bytes memory data,
-        uint64 chainIdTo,
-        uint256[][] memory spentValue,
-        bytes[] memory commission
-    ) external onlyRole(BRIDGE_ROLE) {
-        IBridgeLZ(msg.sender).sendFromTreasury{value: value_}(data, chainIdTo, spentValue, commission);
+    function initialize(address admin_, address gateKeeper_) public initializer {
+        require(admin_ != address(0), "NativeTreasury: zero address");
+        require(gateKeeper_ != address(0), "NativeTreasury: zero address");
+        _grantRole(DEFAULT_ADMIN_ROLE, admin_);
+        gateKeeper = gateKeeper_;
     }
 
     /**
@@ -42,7 +31,8 @@ contract NativeTreasury is INativeTreasury, AccessControlEnumerable  {
      * 
      * @param value_ value to transfer
      */
-    function getValue(uint256 value_) external onlyRole(BRIDGE_ROLE) {
+    function getValue(uint256 value_) external {
+        require(gateKeeper == msg.sender, "NativeTreasury: only gateKeeper");
         payable(msg.sender).transfer(value_);
         emit ValueSent(value_, msg.sender);
     }

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 // Copyright (c) Eywa.Fi, 2021-2023 - all rights reserved
-pragma solidity 0.8.17;
+pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
@@ -13,6 +13,9 @@ import "../interfaces/IBridgeV2.sol";
 import "../interfaces/IGateKeeper.sol";
 import "../interfaces/IAddressBook.sol";
 import "../interfaces/IValidatedDataReciever.sol";
+import { INativeTreasuryFactory } from '../interfaces/INativeTreasuryFactory.sol';
+import { INativeTreasury } from  "../interfaces/INativeTreasury.sol";
+
 contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, ReentrancyGuard {
     using Address for address;
 
@@ -45,11 +48,13 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     /// @dev nonce for senders
     mapping(address => uint256) public nonces;
     // @dev brdige => priority, 1 higher than 10, 0 priority turns off the bridge
-    mapping(address => uint8) public bridgePriorities;   
+    mapping(address => uint8) public bridgePriorities;  
+    // @dev caller => treasury
+    mapping(address => address) public treasuries; 
     // @dev rigistered bridges
     address[] public bridges;
-    // @dev treasury for native value
-    address public treasury;
+    // @dev treasury factory
+    address public treasuryFactory;
     /// @dev protocol -> threshold
     mapping(address => uint8) public threshold;
 
@@ -60,12 +65,17 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     event DiscountSet(address caller, uint256 discount);
     event FeesWithdrawn(address token, uint256 amount, address to);
     event PrioritySet(address bridge, uint8 priority);
-    event TreasurySet(address treasury);
+    event TreasuryFactorySet(address treasury);
 
-    constructor(address treasury_) {
+    constructor() {
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
-        require(treasury_ != address(0), "GateKeeper: zero address");
-        treasury = treasury_;
+
+    }
+
+    function setTreasuryFactory(address treasuryFactory_) external onlyRole(OPERATOR_ROLE) {
+        require(treasuryFactory_ != address(0), "GateKeeper: zero address");
+        treasuryFactory = treasuryFactory_;
+        emit TreasuryFactorySet(treasuryFactory_);
     }
 
     /**
@@ -81,6 +91,12 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
             baseFees[baseFee.chainId][baseFee.payToken] = baseFee.fee;
             emit BaseFeeSet(baseFee.chainId, baseFee.payToken, baseFee.fee);
         }
+    }
+
+    function registerCaller(address treasuryAdmin_, address caller_) external {
+        require(treasuries[caller_] == address(0), "GateKeeper: caller registered");
+        address treasury = INativeTreasuryFactory(treasuryFactory).createNativeTreasury(treasuryAdmin_);
+        treasuries[caller_] = treasury;
     }
 
     /**
@@ -115,20 +131,20 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
      * @param payToken The address of the token to be used for fee payment. Use address(0) to pay with Ether;
      * @param dataLength The length of the data being transmitted in the cross-chain operation;
      * @param chainIdTo The ID of the destination chain;
-     * @param sender The address of the caller requesting the cross-chain operation;
+     * @param caller The address of the caller requesting the cross-chain operation;
      * @return amountToPay The fee amount to be paid for the cross-chain operation.
      */
     function calculateCost(
         address payToken,
         uint256 dataLength,
         uint64 chainIdTo,
-        address sender
+        address caller
     ) public view returns (uint256 amountToPay) {
         uint256 baseFee = baseFees[chainIdTo][payToken];
         uint256 rate = rates[chainIdTo][payToken];
         require(baseFee != 0, "GateKeeper: base fee not set");
         require(rate != 0, "GateKeeper: rate not set");
-        (amountToPay) = _getPercentValues(baseFee + (dataLength * rate), discounts[sender]);
+        (amountToPay) = _getPercentValues(baseFee + (dataLength * rate), discounts[caller]);
     }
 
     /**
@@ -150,14 +166,14 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     }
 
     /**
-     * @notice Sets sender's threshold. Must be the same on the receiver's side.
+     * @notice Sets caller's threshold. Must be the same on the receiver's side.
      *
-     * @param sender The protocol contract address;
+     * @param caller The caller protocol contract address;
      * @param threshold_ The threshold for the given contract address.
      */
-    function setThreshold(address sender, uint8 threshold_) external onlyRole(OPERATOR_ROLE) {
+    function setThreshold(address caller, uint8 threshold_) external onlyRole(OPERATOR_ROLE) {
         require(threshold_ >= 1, "GateKeeper: wrong threshold");
-        threshold[sender] = threshold_;
+        threshold[caller] = threshold_;
     }
 
     // if priority = 0, bridge disabled
@@ -165,12 +181,6 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         require(bridge != address(0), "GateKeeper: zero address");
         bridgePriorities[bridge] = priority;
         emit PrioritySet(bridge, priority);
-    }
-
-    function setTreasury(address treasury_) external onlyRole(OPERATOR_ROLE) {
-        require(treasury_ != address(0), "GateKeeper: zero address");
-        treasury = treasury_;
-        emit TreasurySet(treasury_);
     }
 
     function registerBridge(address bridge, uint8 priority) external onlyRole(OPERATOR_ROLE) {
@@ -195,30 +205,38 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
      * @dev Sends data to a destination contract on a specified chain using the opposite BridgeV2 contract.
      * If payToken is address(0), the payment is made in Ether, otherwise it is made using the ERC20 token 
      * at the specified address.
-     * The payment amount is calculated based on the data length and the specified chain ID and discount rate of the sender.
+     * The payment amount is calculated based on the data length and the specified chain ID and discount rate of the caller.
      *
      * Emits a PaymentReceived event after the payment has been processed.
      *
      * @param data The data (encoded with selector) which would be send to the destination contract;
      * @param to The address of the destination contract;
      * @param chainIdTo The ID of the chain where the destination contract resides;
-     * @param spentValue  Values that will be spent during cross-chain [ [AxelarValueHUB, LZValueHUB], [AxelarValueSOURCE, LZValueSOURCE] ]
-     * @param comissionLZ  Gas commision for execution in other chains [LZCommissionHUB, LZCommissionSOURCE]
+     * @param options Additional options for bridges. 
+     *  Params must be sorted by priority and from las to new chain
+     *  bridge_1 - bridge with priority 1, bridge_2 - brdige with priority 2
+     *  [ 
+     *   [],
+     *   ...
+     *   [bridge_1_destination, bridge_2_destination, bridge_3_destination], 
+     *   [bridge_1_hub, bridge_2_hub], 
+     *   [bridge_1_source, bridge_2_source]  
+     *  ]
      */
     function sendData(
         bytes calldata data,
         address to,
         uint64 chainIdTo,
-        uint256[][] memory spentValue,
-        bytes[] memory comissionLZ
-    ) external payable nonReentrant {
+        bytes memory options
+    ) external nonReentrant {
 
-        payable(treasury).transfer(msg.value);
         address[] memory selectedBridges = _selectBridgesByPriority(threshold[msg.sender]);
         bytes memory out;
         bytes32 requestId;
         uint256 nonce;
         bytes memory collectedData;
+        (bytes[] memory currentOptions, bytes[][] memory nextOptions) = _popOptions(options);
+
         {
             nonce = ++nonces[msg.sender];
             requestId = RequestIdLib.prepareRequestId(
@@ -235,7 +253,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
                 block.chainid
             );
             collectedData = abi.encode(
-                abi.encode(data, _popValues(spentValue), _popCommissions(comissionLZ)), 
+                abi.encode(data, nextOptions), 
                 info, 
                 nonce, 
                 to
@@ -250,6 +268,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
                 bool isHash = true;
                 out = abi.encode(keccak256(collectedData), isHash);
             }
+
             totalCost += _sendCustomBridge(
                 selectedBridges[i], 
                 IBridgeV2.SendParams({
@@ -260,11 +279,9 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
                 }), 
                 nonce,
                 msg.sender,
-                spentValue, 
-                comissionLZ
+                currentOptions[i]
             );
         }
-        require(msg.value >= totalCost, "GateKeeper: invalid payment amount");
     }
 
     /**
@@ -310,34 +327,36 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         IBridgeV2.SendParams memory params,
         uint256 nonce,
         address sender,
-        uint256[][] memory spentValue,
-        bytes[] memory comissionLZ
+        bytes memory options
     ) internal returns(uint256) {
-        return IBridgeV3(bridge).sendV3(
+        uint256 gasFee = IBridgeV3(bridge).estimateGasFee(
+            params,
+            sender,
+            options
+        );
+        INativeTreasury(treasuries[msg.sender]).getValue(gasFee);
+        IBridgeV3(bridge).sendV3{value: gasFee}(
             params,
             sender,
             nonce,
-            spentValue,
-            comissionLZ
+            options
         );
+        return gasFee;
     }
 
-    function _popValues(uint256[][] memory values) internal pure returns(uint256[][] memory newValues) {
-        uint256 valuesLength = values.length;
-        if (valuesLength < 2) return newValues;
-        newValues = new uint256[][](valuesLength - 1);
-        for (uint8 i; i < valuesLength - 1; ++i) {
-            newValues[i] = values[i];
+    function _popOptions(bytes memory options_) internal pure returns (bytes[] memory, bytes[][] memory) {
+        bytes[][] memory options = abi.decode(options_,  (bytes[][]));
+        bytes[] memory currentOptions = options[options.length - 1];
+
+        bytes[][] memory nextOptions = new bytes[][](options.length - 1);
+        
+        for (uint8 i; i < options.length - 1; i++) {
+            nextOptions[i] = options[i];
         }
+        return (currentOptions, nextOptions);
     }
 
-    function _popCommissions(bytes[] memory commissions) internal pure returns(bytes[] memory newCommissions) {
-        uint256 commissionsLength = commissions.length;
-        if (commissionsLength < 2) return newCommissions;
+    receive() external payable {
 
-        newCommissions = new bytes[](commissionsLength - 1);
-        for (uint8 i; i < commissionsLength - 1; ++i) {
-            newCommissions[i] = commissions[i];
-        }
     }
 }

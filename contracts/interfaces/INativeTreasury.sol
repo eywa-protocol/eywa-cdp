@@ -3,14 +3,8 @@
 pragma solidity ^0.8.17;
 
 interface INativeTreasury {
-    
-    function callFromTreasury(
-        uint256 value_,
-        bytes memory data,
-        uint64 chainIdTo,
-        uint256[][] memory spentValue,
-        bytes[] memory comissionLZ
-    ) external;
 
     function getValue(uint256 value_) external;
+
+    function initialize(address admin, address gateKeeper) external;
 }
