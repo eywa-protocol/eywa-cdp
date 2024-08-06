@@ -364,7 +364,6 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
             highestPriority = 255;
             tempBridges[highestPriorityIndex] = address(0);
         }
-        require(selectedBridges.length == bridgeNumber, "GateKeeper: not enough bridges");
         return selectedBridges;
     }
 
