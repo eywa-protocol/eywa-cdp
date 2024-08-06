@@ -270,9 +270,10 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         bytes32 requestId;
         uint256 nonce;
         bytes memory collectedData;
-        (bytes[] memory currentOptions, bytes[][] memory nextOptions) = _popOptions(options);
-
+        bytes[] memory currentOptions;
         {
+            bytes[][] memory nextOptions;
+            (currentOptions, nextOptions) = _popOptions(options);
             nonce = ++nonces[msg.sender];
             requestId = RequestIdLib.prepareRequestId(
                 castToBytes32(to),
@@ -309,7 +310,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
             if (i == 0) {
                 bool isHash = false;
                 out = abi.encode(collectedData, isHash);
-            } else {
+            } else if (i == 1) {
                 bool isHash = true;
                 out = abi.encode(keccak256(collectedData), isHash);
             }
