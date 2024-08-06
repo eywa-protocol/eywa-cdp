@@ -67,6 +67,8 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     event FeesWithdrawn(address token, uint256 amount, address to);
     event PrioritySet(address bridge, uint8 priority);
     event TreasuryFactorySet(address treasury);
+    event ThresholdSet(address sender, uint8 threshold);
+    event BridgePrioritySet(address bridge, uint8 priority);
 
     constructor() {
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
@@ -211,6 +213,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     function setThreshold(address caller, uint8 threshold_) external onlyRole(OPERATOR_ROLE) {
         require(threshold_ >= 1, "GateKeeper: wrong threshold");
         threshold[caller] = threshold_;
+        emit ThresholdSet(caller, threshold_);
     }
 
     // if priority = 0, bridge disabled
@@ -236,6 +239,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     function setBridgePriority(address bridge, uint8 priority) external onlyRole(OPERATOR_ROLE) {
         require(bridge != address(0), "GateKeeper: zero address");
         bridgePriorities[bridge] = priority;
+        emit BridgePrioritySet(bridge, priority);
     }
 
     /**

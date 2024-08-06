@@ -25,6 +25,9 @@ contract Receiver is IReceiver, AccessControlEnumerable {
     /// @dev receivers count
     uint8 public receiversCount;
 
+    event ThresholdSet(address sender, uint8 threshold);
+    event ReceiverCountSet(uint8 receiverCount);
+
     constructor() {
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
         receiversCount = 1;
@@ -40,6 +43,7 @@ contract Receiver is IReceiver, AccessControlEnumerable {
         require(threshold_ >= 1, "Receiver: wrong threshold");
         require(threshold_ <= receiversCount, "Receiver: wrong threshold");
         threshold[sender] = threshold_;
+        emit  ThresholdSet(sender, threshold_);
     }
 
     /**
@@ -50,6 +54,7 @@ contract Receiver is IReceiver, AccessControlEnumerable {
     function setReceiversCount(uint8 receiversCount_) external onlyRole(OPERATOR_ROLE) {
         require(receiversCount_ >= 1, "Receiver: wrong receivers count");
         receiversCount = receiversCount_;
+        emit ReceiverCountSet(receiversCount_);
     }
 
     /**
