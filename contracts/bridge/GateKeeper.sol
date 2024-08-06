@@ -351,6 +351,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         address[] memory selectedBridges = new address[](bridgeNumber);
         if (bridgeNumber == 0) return selectedBridges;
         address[] memory tempBridges = bridges;
+        require(tempBridges.length >= bridgeNumber, "GateKeeper: not enough bridges");
         uint8 highestPriority = 255;
         uint8 highestPriorityIndex;
         uint256 tempBridgesLength = tempBridges.length;
