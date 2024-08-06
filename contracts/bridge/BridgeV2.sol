@@ -53,7 +53,7 @@ contract BridgeV2 is IBridgeV2, IBridgeV3, AccessControlEnumerable, Typecast, Re
         uint64 chainIdTo
     );
 
-    event RequestReceived(bytes32 requestId, string error);
+    event RequestReceived(bytes32 requestId);
 
     event StateSet(State state);
     event ReceiverSet(address receiver);
@@ -207,8 +207,6 @@ contract BridgeV2 is IBridgeV2, IBridgeV3, AccessControlEnumerable, Typecast, Re
                 isRequestIdUniq = previousRequestIdChecker.check(requestId);
             }
 
-            string memory err;
-            
             if (isRequestIdUniq) {
                 if (payload[payload.length - 1] == 0x01){
                     (bytes32 payload_, bool isHash) = abi.decode(payload, (bytes32, bool));
@@ -223,7 +221,7 @@ contract BridgeV2 is IBridgeV2, IBridgeV3, AccessControlEnumerable, Typecast, Re
                 revert("Bridge: request id already seen");
             }
 
-            emit RequestReceived(requestId, err);
+            emit RequestReceived(requestId);
         }
 
         return true;
