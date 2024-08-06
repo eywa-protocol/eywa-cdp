@@ -263,7 +263,9 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         bytes memory options
     ) external nonReentrant {
 
-        address[] memory selectedBridges = _selectBridgesByPriority(threshold[msg.sender]);
+        uint8 threshold_ = threshold[msg.sender];
+        require(threshold_ > 0, "GateKeeper: zero threshold");
+        address[] memory selectedBridges = _selectBridgesByPriority(threshold_);
         bytes memory out;
         bytes32 requestId;
         uint256 nonce;
