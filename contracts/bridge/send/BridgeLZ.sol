@@ -65,9 +65,9 @@ contract BridgeLZ is OAppSender, IBridgeV3, AccessControlEnumerable, ReentrancyG
      * @param chainIdTo_ Chain ID to send
      * @param dstEid_ DstEid of chain
      */
-    function setDstEids(uint64 chainIdTo_, uint32 dstEid_) external onlyRole(OPERATOR_ROLE) {
-        require(chainIdTo_ != 0, "BridgeLZ: zero amount");
-        require(dstEid_ != 0, "BridgeLZ: zero amount");
+    function setDstEid(uint64 chainIdTo_, uint32 dstEid_) external onlyRole(OPERATOR_ROLE) {
+        require(chainIdTo_ != 0, "BridgeLZ: zero value");
+        require(dstEid_ != 0, "BridgeLZ: zero value");
         dstEids[chainIdTo_] = dstEid_;
         emit DstEidSet(chainIdTo_, dstEid_);
     }

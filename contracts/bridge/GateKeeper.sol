@@ -343,7 +343,8 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         uint256 basePercent
     ) private pure returns (uint256 amountToPay) {
         require(amount >= 10, "GateKeeper: amount is too small");
-        uint256 discount = (amount * basePercent) / 10000;
+        uint256 denominator = 10000;
+        uint256 discount = (amount * basePercent) / denominator;
         amountToPay = amount - discount;
     }
 
