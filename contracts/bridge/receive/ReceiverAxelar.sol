@@ -14,7 +14,7 @@ contract ReceiverAxelar is AxelarExpressExecutable {
     using StringToAddress for string;
     
     /// @dev address of main receiver, that stores data and hashes
-    address public receiver;
+    address public immutable receiver;
     constructor(address gateway_, address gasService_, address receiver_) AxelarExpressExecutable(gateway_) {
         require(gateway_ != address(0), "ReceiverAxelar: zero address");
         require(gasService_ != address(0), "ReceiverAxelar: zero address");
