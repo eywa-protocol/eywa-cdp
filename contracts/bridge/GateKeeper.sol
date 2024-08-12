@@ -68,6 +68,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     event TreasuryFactorySet(address treasury);
     event ThresholdSet(address sender, uint8 threshold);
     event BridgePrioritySet(address bridge, uint8 priority);
+    event BridgeRegistered(address bridge, uint8 priority);
 
     constructor() {
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
@@ -225,12 +226,15 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         }
         bridgePriorities[bridge] = priority;
         bridges.push(bridge);
+        _sortBridgesByPriority();
+        emit BridgeRegistered(bridge, priority);
     }
 
     // zero priority - bridge disabled
     function setBridgePriority(address bridge, uint8 priority) external onlyRole(OPERATOR_ROLE) {
         require(bridge != address(0), "GateKeeper: zero address");
         bridgePriorities[bridge] = priority;
+        _sortBridgesByPriority();
         emit BridgePrioritySet(bridge, priority);
     }
 
@@ -347,24 +351,36 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         amountToPay = amount - discount;
     }
 
-    function _selectBridgesByPriority(uint8 bridgeNumber) private view returns (address[] memory) {
-        address[] memory selectedBridges = new address[](bridgeNumber);
-        if (bridgeNumber == 0) return selectedBridges;
+    function _sortBridgesByPriority() private {
+        uint256 bridgesLength = bridges.length;
         address[] memory tempBridges = bridges;
-        require(tempBridges.length >= bridgeNumber, "GateKeeper: not enough bridges");
-        uint8 highestPriority = 255;
-        uint8 highestPriorityIndex;
-        uint256 tempBridgesLength = tempBridges.length;
-        for (uint8 i; i < bridgeNumber; ++i) {
-            for (uint8 j; j < tempBridgesLength; ++j) {
-                if (bridgePriorities[tempBridges[j]] != 0 && highestPriority > bridgePriorities[tempBridges[j]]) {
-                    highestPriority = bridgePriorities[tempBridges[j]];
-                    highestPriorityIndex = j;
+
+        for (uint256 i = 0; i < bridgesLength; ++i) {
+            for (uint256 j = 0; j < bridgesLength - i - 1; ++j) {
+                uint8 priorityCurrent = bridgePriorities[tempBridges[j]];
+                uint8 priorityNext = bridgePriorities[tempBridges[j + 1]];
+                if ((priorityCurrent == 0 && priorityNext > 0) || 
+                    (priorityCurrent > priorityNext && priorityNext != 0)) {
+                    address temp = tempBridges[j];
+                    tempBridges[j] = tempBridges[j + 1];
+                    tempBridges[j + 1] = temp;
                 }
             }
-            selectedBridges[i] = tempBridges[highestPriorityIndex];
-            highestPriority = 255;
-            tempBridges[highestPriorityIndex] = address(0);
+        }
+
+        for (uint256 i = 0; i < bridgesLength; ++i) {
+            if (bridges[i] != tempBridges[i]) {
+                bridges[i] = tempBridges[i];
+            }
+        }
+    }
+
+    function _selectBridgesByPriority(uint8 threshold_) private view returns(address[] memory) {
+        address[] memory selectedBridges = new address[](threshold_);
+        for (uint8 i; i < threshold_; ++i) {
+            address currentBridge = bridges[i];
+            require(bridgePriorities[currentBridge] != 0, "GateKeeper: not enough bridges");
+            selectedBridges[i] = currentBridge;
         }
         return selectedBridges;
     }
