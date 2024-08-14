@@ -10,16 +10,33 @@ import "../../interfaces/IBridgeV3.sol";
 import "../../interfaces/IAddressBook.sol";
 import "../../interfaces/IReceiver.sol";
 import "../../interfaces/INativeTreasury.sol";
-contract ReceiverLZ is OAppReceiver {
+contract ReceiverLZ is OAppReceiver, AccessControlEnumerable {
     
+    /// @dev operator role id
+    bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
     /// @dev address of main receiver, that stores data and hashes
     address public immutable receiver;
-    constructor(address endpoint_, address owner_, address receiver_) OAppCore(endpoint_, owner_) {
+
+    constructor(address endpoint_,  address receiver_) OAppCore(endpoint_, msg.sender) {
         require(endpoint_ != address(0), "ReceiverLZ: zero address");
-        require(owner_ != address(0), "ReceiverLZ: zero address");
         require(receiver_ != address(0), "ReceiverLZ: zero address");
+        _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
         receiver = receiver_;
     }
+
+    /**
+     * @dev Set peer for OApp
+     * 
+     * Required to be set for each EID
+     * 
+     * @param _eid Eid of chain
+     * @param _peer Destination OApp contract address in bytes32 format
+     */
+    function setPeer(uint32 _eid, bytes32 _peer) public override onlyRole(OPERATOR_ROLE) {
+        peers[_eid] = _peer;
+        emit PeerSet(_eid, _peer);
+    }
+
     /**
      * @dev Entry point for receiving messages or packets from the endpoint.
      * @param origin_ The origin information containing the source endpoint and sender address.
