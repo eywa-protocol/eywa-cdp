@@ -57,6 +57,7 @@ contract BridgeV2 is IBridgeV2, IBridgeV3, AccessControlEnumerable, Typecast, Re
 
     event StateSet(State state);
     event ReceiverSet(address receiver);
+    event ValueWithdrawn(address receiver, uint256 amount);
 
     constructor() {
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
@@ -166,7 +167,12 @@ contract BridgeV2 is IBridgeV2, IBridgeV3, AccessControlEnumerable, Typecast, Re
         address sender,
         bytes memory options
     ) public view returns (uint256) {
-        return IGateKeeper(msg.sender).calculateCost(address(0), params.data.length, uint64(params.chainIdTo), sender);
+        return 0;
+    }
+
+    function withdrawValue(uint256 value_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        payable(msg.sender).transfer(value_);
+        emit ValueWithdrawn(msg.sender, value_);
     }
 
     /**

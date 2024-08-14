@@ -21,8 +21,8 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     struct BaseFee {
         /// @dev chainId The ID of the chain for which the base fee is being set
         uint64 chainId;
-        /// @dev payToken The token for which the base fee is being set; use 0x0 to set base fee in a native asset
-        address payToken;
+        /// @dev bridge 
+        address bridge;
         /// @dev fee The amount of the base fee being set
         uint256 fee;
     }
@@ -30,15 +30,15 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     struct Rate {
         /// @dev chainId The ID of the chain for which the base fee is being set
         uint64 chainId;
-        /// @dev payToken The token for which the base fee is being set; use 0x0 to set base fee in a native asset
-        address payToken;
+        /// @dev bridge 
+        address bridge;
         /// @dev rate The rate being set
         uint256 rate;
     }
 
     /// @dev operator role id
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
-    /// @dev chainId => pay token => base fees
+    /// @dev chainId => bridge => base fees
     mapping(uint64 => mapping(address => uint256)) public baseFees;
     /// @dev chainId => pay token => rate (per byte)
     mapping(uint64 => mapping(address => uint256)) public rates;
@@ -61,8 +61,8 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
 
     event CrossChainCallPaid(address indexed sender, address indexed token, uint256 transactionCost);
     event BridgeSet(address bridge);
-    event BaseFeeSet(uint64 chainId, address payToken, uint256 fee);
-    event RateSet(uint64 chainId, address payToken, uint256 rate);
+    event BaseFeeSet(uint64 chainId, address bridge, uint256 fee);
+    event RateSet(uint64 chainId, address bridge, uint256 rate);
     event DiscountSet(address caller, uint256 discount);
     event FeesWithdrawn(address token, uint256 amount, address to);
     event TreasuryFactorySet(address treasury);
@@ -84,15 +84,14 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     /**
      * @notice Sets the base fee for a given chain ID and token address.
      * The base fee represents the minimum amount of pay {TOKEN} required as transaction fee.
-     * Use 0x0 as payToken address to set base fee in native asset.
      *
      * @param baseFees_ The array of the BaseFee structs.
      */
     function setBaseFee(BaseFee[] memory baseFees_) external onlyRole(OPERATOR_ROLE) {
         for (uint256 i = 0; i < baseFees_.length; ++i) {
             BaseFee memory baseFee = baseFees_[i];
-            baseFees[baseFee.chainId][baseFee.payToken] = baseFee.fee;
-            emit BaseFeeSet(baseFee.chainId, baseFee.payToken, baseFee.fee);
+            baseFees[baseFee.chainId][baseFee.bridge] = baseFee.fee;
+            emit BaseFeeSet(baseFee.chainId, baseFee.bridge, baseFee.fee);
         }
     }
 
@@ -111,8 +110,8 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     function setRate(Rate[] memory rates_) external onlyRole(OPERATOR_ROLE) {
         for (uint256 i = 0; i < rates_.length; ++i) {
             Rate memory rate = rates_[i];
-            rates[rate.chainId][rate.payToken] = rate.rate;
-            emit RateSet(rate.chainId, rate.payToken, rate.rate);
+            rates[rate.chainId][rate.bridge] = rate.rate;
+            emit RateSet(rate.chainId, rate.bridge, rate.rate);
         }
     }
 
@@ -131,20 +130,19 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     /**
      * @notice Calculates the cost for a cross-chain operation in the specified token.
      *
-     * @param payToken The address of the token to be used for fee payment. Use address(0) to pay with Ether;
      * @param dataLength The length of the data being transmitted in the cross-chain operation;
      * @param chainIdTo The ID of the destination chain;
      * @param caller The address of the caller requesting the cross-chain operation;
      * @return amountToPay The fee amount to be paid for the cross-chain operation.
      */
-    function calculateCost(
-        address payToken,
+    function calculateAdditionalFee(
         uint256 dataLength,
         uint64 chainIdTo,
+        address bridge,
         address caller
     ) public view returns (uint256 amountToPay) {
-        uint256 baseFee = baseFees[chainIdTo][payToken];
-        uint256 rate = rates[chainIdTo][payToken];
+        uint256 baseFee = baseFees[chainIdTo][bridge];
+        uint256 rate = rates[chainIdTo][bridge];
         require(baseFee != 0, "GateKeeper: base fee not set");
         require(rate != 0, "GateKeeper: rate not set");
         (amountToPay) = _getPercentValues(baseFee + (dataLength * rate), discounts[caller]);
@@ -397,7 +395,8 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
             sender,
             options
         );
-        INativeTreasury(treasuries[msg.sender]).getValue(gasFee);
+        uint256 additionalFee = calculateAdditionalFee(params.data.length, uint64(params.chainIdTo), bridge, msg.sender);
+        INativeTreasury(treasuries[msg.sender]).getValue(gasFee + additionalFee);
         IBridgeV3(bridge).sendV3{value: gasFee}(
             params,
             sender,

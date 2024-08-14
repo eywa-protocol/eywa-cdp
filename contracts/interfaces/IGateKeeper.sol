@@ -4,10 +4,10 @@ pragma solidity ^0.8.20;
 
 interface IGateKeeper {
 
-    function calculateCost(
-        address payToken,
+    function calculateAdditionalFee(
         uint256 dataLength,
         uint64 chainIdTo,
+        address bridge,
         address sender
     ) external view returns (uint256 amountToPay);
 
