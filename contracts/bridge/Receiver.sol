@@ -110,14 +110,14 @@ contract Receiver is IReceiver, AccessControlEnumerable {
      */
     function _call(bytes memory receivedData) internal {
         (
-            bytes memory dataWithSpendings,
+            bytes memory data,
             bytes memory check,
             uint256 nonce,
             address executor
         ) = abi.decode(receivedData, (bytes, bytes, uint256, address));
         bytes memory result = executor.functionCall(check);
         require(abi.decode(result, (bool)), "Receiver: check failed");
-        executor.functionCall(dataWithSpendings, "Receiver: receive failed");
+        executor.functionCall(data, "Receiver: receive failed");
     }
 
     function _eraseEnumerableSet(EnumerableSet.AddressSet storage set) internal {

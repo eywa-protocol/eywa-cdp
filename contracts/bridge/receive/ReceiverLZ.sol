@@ -55,13 +55,12 @@ contract ReceiverLZ is OAppReceiver, AccessControlEnumerable {
         address executor_,
         bytes calldata extraData_
     ) internal override {
-        address originSender = address(uint160(uint256(origin_.sender)));
         if (message_[message_.length - 1] == 0x01){
-            (bytes32 payload, bool isHash) = abi.decode(message_, (bytes32, bool));
-            IReceiver(receiver).receiveHashData(originSender, bytes32(payload));
+            (bytes32 payload, address sender, bool isHash) = abi.decode(message_, (bytes32, address, bool));
+            IReceiver(receiver).receiveHashData(sender, bytes32(payload));
         } else if (message_[message_.length - 1] == 0x00) {
-            (bytes memory payload, bool isHash) = abi.decode(message_, (bytes, bool));
-            IReceiver(receiver).receiveData(originSender, payload);
+            (bytes memory payload, address sender, bool isHash) = abi.decode(message_, (bytes, address, bool));
+            IReceiver(receiver).receiveData(sender, payload);
         } else {
             revert("ReceiverLZ: wrong message");
         }

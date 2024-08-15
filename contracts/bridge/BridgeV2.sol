@@ -215,11 +215,11 @@ contract BridgeV2 is IBridgeV2, IBridgeV3, AccessControlEnumerable, Typecast, Re
 
             if (isRequestIdUniq) {
                 if (payload[payload.length - 1] == 0x01){
-                    (bytes32 payload_, bool isHash) = abi.decode(payload, (bytes32, bool));
-                    IReceiver(receiver).receiveHashData(address(this), bytes32(payload_));
+                    (bytes32 payload_, address sender, bool isHash) = abi.decode(receivedData, (bytes32, address, bool));
+                    IReceiver(receiver).receiveHashData(sender, payload_);
                 } else if (payload[payload.length - 1] == 0x00) {
-                    (bytes memory payload_, bool isHash) = abi.decode(payload, (bytes, bool));
-                    IReceiver(receiver).receiveData(address(this), payload_);
+                    (bytes memory payload_, address sender, bool isHash) = abi.decode(receivedData, (bytes, address, bool));
+                    IReceiver(receiver).receiveData(sender, payload_);
                 } else {
                     revert("Bridge: wrong message");
                 }

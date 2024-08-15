@@ -49,13 +49,12 @@ contract ReceiverAxelar is AxelarExpressExecutable, AccessControlEnumerable {
         bytes calldata payload_
     ) internal override {
         require(peers[sourceChain] == sourceAddress.toAddress(), "ReceiverAxelar: wrong peer");
-        address originSender = sourceAddress.toAddress();
         if (payload_[payload_.length - 1] == 0x01){
-            (bytes32 payload, bool isHash) = abi.decode(payload_, (bytes32, bool));
-            IReceiver(receiver).receiveHashData(originSender, bytes32(payload));
+            (bytes32 payload, address sender, bool isHash) = abi.decode(payload_, (bytes32, address, bool));
+            IReceiver(receiver).receiveHashData(sender, bytes32(payload));
         } else if (payload_[payload_.length - 1] == 0x00) {
-            (bytes memory payload, bool isHash) = abi.decode(payload_, (bytes, bool));
-            IReceiver(receiver).receiveData(originSender, payload);
+            (bytes memory payload, address sender, bool isHash) = abi.decode(payload_, (bytes, address, bool));
+            IReceiver(receiver).receiveData(sender, payload);
         } else {
             revert("ReceiverAxelar: wrong message");
         }

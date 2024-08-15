@@ -163,9 +163,9 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         )), "GateKeeper: wrong data");
 
         if (isHash) {
-            params.data = abi.encode(keccak256(params.data), isHash);
+            params.data = abi.encode(keccak256(params.data), sender, isHash);
         } else {
-            params.data = abi.encode(params.data, isHash);
+            params.data = abi.encode(params.data, sender, isHash);
         }
 
         uint256 gasFee = IBridgeV3(bridge).estimateGasFee(
@@ -264,17 +264,13 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         uint64 chainIdTo,
         bytes memory options
     ) external nonReentrant {
-
-        uint8 threshold_ = threshold[msg.sender];
-        require(threshold_ > 0, "GateKeeper: zero threshold");
-        address[] memory selectedBridges = _selectBridgesByPriority(threshold_);
         bytes memory out;
         bytes32 requestId;
         uint256 nonce;
         bytes memory collectedData;
         bytes[] memory currentOptions;
         {
-            bytes[][] memory nextOptions;
+            bytes memory nextOptions;
             (currentOptions, nextOptions) = _popOptions(options);
             nonce = ++nonces[msg.sender];
             requestId = RequestIdLib.prepareRequestId(
@@ -284,14 +280,15 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
                 block.chainid,
                 nonce
             );
+            bytes4 selector = bytes4(data[:4]);
             bytes memory info = abi.encodeWithSelector(
                 IValidatedDataReciever.receiveValidatedData.selector,
-                bytes4(data[:4]),
+                selector,
                 msg.sender,
                 block.chainid
             );
             collectedData = abi.encode(
-                abi.encode(data, nextOptions), 
+                abi.encodeWithSelector(selector, data, nextOptions), 
                 info, 
                 nonce, 
                 to
@@ -299,7 +296,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
             sendedData[msg.sender][nonce] = keccak256(abi.encode(
                 IBridgeV2.SendParams({
                         requestId: requestId,
-                        data: abi.encode(data, nextOptions),
+                        data: abi.encodeWithSelector(selector, data, nextOptions),
                         to: to,
                         chainIdTo: chainIdTo
                 }), 
@@ -307,14 +304,20 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
                 msg.sender
             ));
         }
+        
+        // TODO raise up require(). Fix stack too deep
         uint256 totalCost;
+        uint8 threshold_ = threshold[msg.sender];
+        require(threshold_ > 0, "GateKeeper: zero threshold");
+        address[] memory selectedBridges = _selectBridgesByPriority(threshold_);
+
         for (uint8 i; i < selectedBridges.length; ++i) {
             if (i == 0) {
                 bool isHash = false;
-                out = abi.encode(collectedData, isHash);
+                out = abi.encode(collectedData, msg.sender, isHash);
             } else if (i == 1) {
                 bool isHash = true;
-                out = abi.encode(keccak256(collectedData), isHash);
+                out = abi.encode(keccak256(collectedData), msg.sender, isHash);
             }
 
             totalCost += _sendCustomBridge(
@@ -406,7 +409,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         return gasFee;
     }
 
-    function _popOptions(bytes memory options_) internal pure returns (bytes[] memory, bytes[][] memory) {
+    function _popOptions(bytes memory options_) internal pure returns (bytes[] memory, bytes memory) {
         bytes[][] memory options = abi.decode(options_,  (bytes[][]));
         bytes[] memory currentOptions = options[options.length - 1];
 
@@ -415,7 +418,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         for (uint8 i; i < options.length - 1; i++) {
             nextOptions[i] = options[i];
         }
-        return (currentOptions, nextOptions);
+        return (currentOptions, abi.encode(nextOptions));
     }
 
     receive() external payable {
