@@ -9,14 +9,15 @@ import "../interfaces/IGateKeeper.sol";
 
 contract NativeTreasury is INativeTreasury, AccessControlEnumerable, Initializable  {
     
-    /// @dev bridge role id
-    bytes32 public constant BRIDGE_ROLE = keccak256("BRIDGE_ROLE");
-
     address public gateKeeper;
     event ValueSent(uint256 value, address to);
 
     constructor() {
         _disableInitializers();
+    }
+
+    receive() external payable {
+
     }
     
     function initialize(address admin_, address gateKeeper_) public initializer {
@@ -47,7 +48,5 @@ contract NativeTreasury is INativeTreasury, AccessControlEnumerable, Initializab
         emit ValueSent(value_, msg.sender);
     }
 
-    receive() external payable {
 
-    }
 }

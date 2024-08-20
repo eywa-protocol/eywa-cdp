@@ -67,14 +67,39 @@ contract Receiver is IReceiver, AccessControlEnumerable {
         uint8 threshold_ = threshold[sender];
         require(threshold_ > 0, "Receiver: threshold is not set");
         bytes32 hash_ = keccak256(receivedData);
-        require(!_payloadThreshold[hash_].contains(msg.sender), "Receiver: already received");
-        if (_payloadThreshold[hash_].length() + 1 >= threshold_) {
+        
+        if(_payloadThreshold[hash_].contains(msg.sender)) {
+            if(_checkThreshold(_payloadThreshold[hash_].length(), threshold_, receivedData, hash_)){
+                return;
+            }
+            if (payload[hash_].length == 0) {
+                payload[hash_] = receivedData;
+            } else {
+                revert("Receiver: already received");
+            }
+        } else {
+            if(_checkThreshold(_payloadThreshold[hash_].length() + 1, threshold_, receivedData, hash_)){
+                return;
+            }
+            if (payload[hash_].length == 0) {
+                payload[hash_] = receivedData;
+            }
+            _payloadThreshold[hash_].add(msg.sender);
+        }
+    }
+
+    function _checkThreshold(
+        uint256 currentThreshold, 
+        uint256 targetThreshold, 
+        bytes memory receivedData, 
+        bytes32 hash_
+    ) internal returns(bool) {
+        if (currentThreshold >= targetThreshold) {
             _call(receivedData);
             _eraseEnumerableSet(_payloadThreshold[hash_]);
             delete _payloadThreshold[hash_];
-        } else {
-            payload[hash_] = receivedData;
-            _payloadThreshold[hash_].add(msg.sender);
+            delete payload[hash_];
+            return true;
         }
     }
 

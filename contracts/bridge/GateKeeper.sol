@@ -57,7 +57,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     /// @dev protocol -> threshold
     mapping(address => uint8) public threshold;
     /// @dev msg.sender -> nonce -> hash of data
-    mapping(address => mapping(uint256 => bytes32)) public sendedData;
+    mapping(address => mapping(uint256 => bytes32)) public sentDataHash;
 
     event CrossChainCallPaid(address indexed sender, address indexed token, uint256 transactionCost);
     event BridgeSet(address bridge);
@@ -69,6 +69,15 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     event ThresholdSet(address sender, uint8 threshold);
     event BridgePrioritySet(address bridge, uint8 priority);
     event BridgeRegistered(address bridge, uint8 priority);
+    event DataSent(
+        address[] selectedBridges, 
+        bytes32 requestId, 
+        bytes collectedData, 
+        address to, 
+        uint64 chainIdTo, 
+        uint256 nonce, 
+        address sender
+    );
 
     constructor() {
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
@@ -156,7 +165,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         bytes memory currentOptions,
         bool isHash
         ) external payable {
-        require(sendedData[sender][nonce] == keccak256(abi.encode(
+        require(sentDataHash[sender][nonce] == keccak256(abi.encode(
             params,
             nonce,
             sender
@@ -293,7 +302,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
                 nonce, 
                 to
             );
-            sendedData[msg.sender][nonce] = keccak256(abi.encode(
+            sentDataHash[msg.sender][nonce] = keccak256(abi.encode(
                 IBridgeV2.SendParams({
                         requestId: requestId,
                         data: abi.encodeWithSelector(selector, data, nextOptions),
@@ -306,7 +315,6 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         }
         
         // TODO raise up require(). Fix stack too deep
-        uint256 totalCost;
         uint8 threshold_ = threshold[msg.sender];
         require(threshold_ > 0, "GateKeeper: zero threshold");
         address[] memory selectedBridges = _selectBridgesByPriority(threshold_);
@@ -320,7 +328,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
                 out = abi.encode(keccak256(collectedData), msg.sender, isHash);
             }
 
-            totalCost += _sendCustomBridge(
+            _sendCustomBridge(
                 selectedBridges[i], 
                 IBridgeV2.SendParams({
                         requestId: requestId,
@@ -333,6 +341,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
                 currentOptions[i]
             );
         }
+        emit DataSent(selectedBridges, requestId, collectedData, to, chainIdTo, nonce, msg.sender);
     }
 
     /**
