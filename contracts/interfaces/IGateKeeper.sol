@@ -19,5 +19,4 @@ interface IGateKeeper {
     ) external;
 
     function treasuries(address sender) external returns (address treasury);
-    function bridgePriorities(address bridge) external returns (uint8 priority);
 }

@@ -47,12 +47,12 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     mapping(address => uint256) public discounts;
     /// @dev nonce for senders
     mapping(address => uint256) public nonces;
-    // @dev brdige => priority, 1 higher than 10, 0 priority turns off the bridge
-    mapping(address => uint8) public bridgePriorities;  
+    // @dev brdige => is registered
+    mapping(address => bool) public registeredBridges;  
     // @dev caller => treasury
     mapping(address => address) public treasuries; 
-    // @dev rigistered bridges
-    address[] public bridges;
+    // @dev array of sorted by priorities bridges. Bytes32 = protocol address + chainIdTo
+    mapping(bytes32 => address[]) public bridges;
     /// @dev protocol -> threshold
     mapping(address => uint8) public threshold;
     /// @dev msg.sender -> nonce -> hash of data
@@ -65,8 +65,8 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     event DiscountSet(address caller, uint256 discount);
     event FeesWithdrawn(address token, uint256 amount, address to);
     event ThresholdSet(address sender, uint8 threshold);
-    event BridgePrioritySet(address bridge, uint8 priority);
-    event BridgeRegistered(address bridge, uint8 priority);
+    event BridgeRegistered(address bridge, bool status);
+    event BridgesPriorityUpdated(address protocol, uint64[] chainIds, address[][] bridges);
     event DataSent(
         address[] selectedBridges, 
         bytes32 requestId, 
@@ -76,11 +76,19 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         uint256 nonce, 
         address sender
     );
+    event RetrySent(
+        address bridge, 
+        IBridgeV2.SendParams params,
+        uint256 nonce, 
+        address sender
+    );
 
     constructor() {
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
 
     }
+
+    receive() external payable { }
 
     /**
      * @notice Sets the base fee for a given chain ID and token address.
@@ -183,6 +191,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         if (msg.value > gasFee) {
             payable(msg.sender).transfer(msg.value - gasFee);
         }
+        emit RetrySent(bridge, params, nonce, msg.sender);
     }
 
     /**
@@ -215,26 +224,19 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         emit ThresholdSet(caller, threshold_);
     }
 
-    function registerBridge(address bridge, uint8 priority) external onlyRole(OPERATOR_ROLE) {
+    function updateBridgeRegistration(address bridge, bool status) external onlyRole(OPERATOR_ROLE) {
         require(bridge != address(0), "GateKeeper: zero address");
-        uint256 bridgesLength = bridges.length;
-        for (uint8 i; i < bridgesLength; ++i) {
-            if (bridge == bridges[i]) {
-                revert("GateKeeper: bridge registered");
-            }
-        }
-        bridgePriorities[bridge] = priority;
-        bridges.push(bridge);
-        _sortBridgesByPriority();
-        emit BridgeRegistered(bridge, priority);
+        registeredBridges[bridge] = status;
+        emit BridgeRegistered(bridge, status);
     }
 
-    // zero priority - bridge disabled
-    function setBridgePriority(address bridge, uint8 priority) external onlyRole(OPERATOR_ROLE) {
-        require(bridge != address(0), "GateKeeper: zero address");
-        bridgePriorities[bridge] = priority;
-        _sortBridgesByPriority();
-        emit BridgePrioritySet(bridge, priority);
+    function updateBridgesPriority(address protocol_, uint64[] memory chainIds_, address[][] memory bridges_) external onlyRole(OPERATOR_ROLE) {
+        uint256 length = chainIds_.length;
+        require(chainIds_.length == bridges_.length, "GateKeeper: wrong lengths");
+        for (uint256 i; i < length; ++i) {
+            bridges[_packKey(protocol_, chainIds_[i])] = bridges_[i];
+        }
+        emit BridgesPriorityUpdated(protocol_, chainIds_, bridges_);
     }
 
     /**
@@ -308,11 +310,10 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         
         uint8 threshold_ = threshold[msg.sender];
         require(threshold_ > 0, "GateKeeper: zero threshold");
-        address[] memory selectedBridges = _selectBridgesByPriority(threshold_);
+        address[] memory selectedBridges = _selectBridgesByPriority(threshold_, chainIdTo, msg.sender);
 
         for (uint8 i; i < selectedBridges.length; ++i) {
             if (i == 0) {
-
                 out = _encodeOut(abi.encode(collectedData, msg.sender), 0x00); // isHash false
             } else if (i == 1) {
                 out = _encodeOut(abi.encode(keccak256(collectedData), msg.sender), 0x01); // isHash true
@@ -334,7 +335,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         emit DataSent(selectedBridges, requestId, collectedData, to, chainIdTo, nonce, msg.sender);
     }
 
-    function _encodeOut(bytes memory out, bytes1 isHash) internal returns(bytes memory newOut) {
+    function _encodeOut(bytes memory out, bytes1 isHash) internal pure returns(bytes memory newOut) {
         uint256 length = out.length;
         newOut = new bytes(length + 1);
         for (uint j; j < length; ++j) {
@@ -360,35 +361,11 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         amountToPay = amount - discount;
     }
 
-    function _sortBridgesByPriority() private {
-        uint256 bridgesLength = bridges.length;
-        address[] memory tempBridges = bridges;
-
-        for (uint256 i = 0; i < bridgesLength; ++i) {
-            for (uint256 j = 0; j < bridgesLength - i - 1; ++j) {
-                uint8 priorityCurrent = bridgePriorities[tempBridges[j]];
-                uint8 priorityNext = bridgePriorities[tempBridges[j + 1]];
-                if ((priorityCurrent == 0 && priorityNext > 0) || 
-                    (priorityCurrent > priorityNext && priorityNext != 0)) {
-                    address temp = tempBridges[j];
-                    tempBridges[j] = tempBridges[j + 1];
-                    tempBridges[j + 1] = temp;
-                }
-            }
-        }
-
-        for (uint256 i = 0; i < bridgesLength; ++i) {
-            if (bridges[i] != tempBridges[i]) {
-                bridges[i] = tempBridges[i];
-            }
-        }
-    }
-
-    function _selectBridgesByPriority(uint8 threshold_) private view returns(address[] memory) {
+    function _selectBridgesByPriority(uint8 threshold_, uint64 chainIdTo, address protocol) private view returns(address[] memory) {
         address[] memory selectedBridges = new address[](threshold_);
         for (uint8 i; i < threshold_; ++i) {
-            address currentBridge = bridges[i];
-            require(bridgePriorities[currentBridge] != 0, "GateKeeper: not enough bridges");
+            address currentBridge = bridges[_packKey(protocol, chainIdTo)][i];
+            require(registeredBridges[currentBridge], "GateKeeper: bridge not registered");
             selectedBridges[i] = currentBridge;
         }
         return selectedBridges;
@@ -429,7 +406,9 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         return (currentOptions, abi.encode(nextOptions));
     }
 
-    receive() external payable {
-
+    function _packKey(address addr, uint64 number) internal pure returns(bytes32) {
+        bytes32 packedKey = bytes32(uint256(uint160(addr)) << 64);
+        packedKey |= bytes32(uint256(number));
+        return packedKey;
     }
 }
