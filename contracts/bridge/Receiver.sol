@@ -22,6 +22,8 @@ contract Receiver is IReceiver, AccessControlEnumerable {
     mapping(bytes32 => bytes) public payload;
     /// @dev protocol -> threshold
     mapping(address => uint8) public threshold;
+    /// @dev hash -> execute status
+    mapping(bytes32 => bool) public executedData;
     /// @dev receivers count
     uint8 public receiversCount;
 
@@ -94,7 +96,9 @@ contract Receiver is IReceiver, AccessControlEnumerable {
         bytes memory receivedData, 
         bytes32 hash_
     ) internal returns(bool) {
+        require(executedData[hash_] == false, "Receiver: already executed");
         if (currentThreshold >= targetThreshold) {
+            executedData[hash_] = true;
             _call(receivedData);
             _eraseEnumerableSet(_payloadThreshold[hash_]);
             delete _payloadThreshold[hash_];
