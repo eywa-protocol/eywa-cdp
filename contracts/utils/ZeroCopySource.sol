@@ -25,7 +25,7 @@ library ZeroCopySource {
     function NextBool(bytes memory buff, uint256 offset) internal pure returns (bool, uint256) {
         require(offset + 1 <= buff.length && offset < offset + 1, "Offset exceeds limit");
         // byte === bytes1
-        uint8 v;
+        bytes1 v;
         assembly {
             v := mload(add(add(buff, 0x20), offset))
         }
