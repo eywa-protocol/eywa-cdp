@@ -5,6 +5,4 @@ pragma solidity ^0.8.17;
 interface INativeTreasury {
 
     function getValue(uint256 value_) external;
-
-    function initialize(address admin, address gateKeeper) external;
 }

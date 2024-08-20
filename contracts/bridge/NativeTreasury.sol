@@ -2,34 +2,26 @@
 // Copyright (c) Eywa.Fi, 2021-2023 - all rights reserved
 pragma solidity ^0.8.20;
 
-import { AccessControlEnumerable } from "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
-import { Initializable } from '@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol';
+import { Ownable2Step } from "@openzeppelin/contracts/access/Ownable2Step.sol";
+
 import "../interfaces/INativeTreasury.sol";
 import "../interfaces/IGateKeeper.sol";
 
-contract NativeTreasury is INativeTreasury, AccessControlEnumerable, Initializable  {
-    
+contract NativeTreasury is INativeTreasury, Ownable2Step {
     address public gateKeeper;
     event ValueSent(uint256 value, address to);
 
-    constructor() {
-        _disableInitializers();
-    }
-
-    receive() external payable {
-
-    }
-    
-    function initialize(address admin_, address gateKeeper_) public initializer {
+    constructor(address admin_) {
         require(admin_ != address(0), "NativeTreasury: zero address");
-        require(gateKeeper_ != address(0), "NativeTreasury: zero address");
-        _grantRole(DEFAULT_ADMIN_ROLE, admin_);
-        gateKeeper = gateKeeper_;
+        _transferOwnership(admin_);
+        gateKeeper = msg.sender;
     }
+
+    receive() external payable {}
 
     /**
      * @dev Get value for msg.sender
-     * 
+     *
      * @param value_ value to transfer
      */
     function getValue(uint256 value_) external {
@@ -39,14 +31,13 @@ contract NativeTreasury is INativeTreasury, AccessControlEnumerable, Initializab
     }
 
     /**
-     * @dev Withdraw value 
-     * 
+     * @dev Withdraw value
+     *
      * @param value_ value to withdraw
      */
-    function withdrawValue(uint256 value_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function withdrawValue(uint256 value_) external onlyOwner {
         payable(msg.sender).transfer(value_);
         emit ValueSent(value_, msg.sender);
     }
-
 
 }

@@ -14,6 +14,7 @@ import "../interfaces/IGateKeeper.sol";
 import "../interfaces/IAddressBook.sol";
 import "../interfaces/IValidatedDataReciever.sol";
 import { INativeTreasuryFactory } from '../interfaces/INativeTreasuryFactory.sol';
+import { NativeTreasury } from '../bridge/NativeTreasury.sol';
 import { INativeTreasury } from  "../interfaces/INativeTreasury.sol";
 contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, ReentrancyGuard {
     using Address for address;
@@ -52,8 +53,6 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     mapping(address => address) public treasuries; 
     // @dev rigistered bridges
     address[] public bridges;
-    // @dev treasury factory
-    address public treasuryFactory;
     /// @dev protocol -> threshold
     mapping(address => uint8) public threshold;
     /// @dev msg.sender -> nonce -> hash of data
@@ -65,7 +64,6 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     event RateSet(uint64 chainId, address bridge, uint256 rate);
     event DiscountSet(address caller, uint256 discount);
     event FeesWithdrawn(address token, uint256 amount, address to);
-    event TreasuryFactorySet(address treasury);
     event ThresholdSet(address sender, uint8 threshold);
     event BridgePrioritySet(address bridge, uint8 priority);
     event BridgeRegistered(address bridge, uint8 priority);
@@ -84,12 +82,6 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
 
     }
 
-    function setTreasuryFactory(address treasuryFactory_) external onlyRole(OPERATOR_ROLE) {
-        require(treasuryFactory_ != address(0), "GateKeeper: zero address");
-        treasuryFactory = treasuryFactory_;
-        emit TreasuryFactorySet(treasuryFactory_);
-    }
-
     /**
      * @notice Sets the base fee for a given chain ID and token address.
      * The base fee represents the minimum amount of pay {TOKEN} required as transaction fee.
@@ -106,7 +98,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
 
     function registerCaller(address treasuryAdmin_, address caller_) external {
         require(treasuries[caller_] == address(0), "GateKeeper: caller registered");
-        address treasury = INativeTreasuryFactory(treasuryFactory).createNativeTreasury(treasuryAdmin_);
+        address treasury = address(new NativeTreasury(treasuryAdmin_));
         treasuries[caller_] = treasury;
     }
 
