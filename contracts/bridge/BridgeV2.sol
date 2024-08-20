@@ -12,9 +12,7 @@ import "../interfaces/IGateKeeper.sol";
 import "../utils/Block.sol";
 import "../utils/Bls.sol";
 import "../utils/Merkle.sol";
-import "../utils/RequestIdChecker.sol";
 import "../utils/Typecast.sol";
-
 
 contract BridgeV2 is IBridgeV2, IBridgeV3, AccessControlEnumerable, Typecast, ReentrancyGuard {
     
@@ -35,10 +33,9 @@ contract BridgeV2 is IBridgeV2, IBridgeV3, AccessControlEnumerable, Typecast, Re
     string public version;
     /// @dev current state Active\Inactive
     State public state;
-    /// @dev received request IDs against relay
-    RequestIdChecker public currentRequestIdChecker;
-    /// @dev received request IDs against relay
-    RequestIdChecker public previousRequestIdChecker;
+    /// @dev received request IDs 
+    mapping(uint32 epochNum => mapping(bytes32 => bool)) public requestIdChecker;
+
     // current epoch
     Bls.Epoch internal currentEpoch;
     // previous epoch
@@ -62,8 +59,6 @@ contract BridgeV2 is IBridgeV2, IBridgeV3, AccessControlEnumerable, Typecast, Re
     constructor() {
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
         version = "2.2.3";
-        currentRequestIdChecker = new RequestIdChecker();
-        previousRequestIdChecker = new RequestIdChecker();
         state = State.Inactive;
     }
 
@@ -206,14 +201,16 @@ contract BridgeV2 is IBridgeV2, IBridgeV3, AccessControlEnumerable, Typecast, Re
 
             require(to.isContract(), "Bridge: receiver is not a contract");
 
-            bool isRequestIdUniq;
+            bool isRequestIdReceived;
             if (epochHash == currentEpoch.epochHash) {
-                isRequestIdUniq = currentRequestIdChecker.check(requestId);
+                isRequestIdReceived = requestIdChecker[currentEpoch.epochNum][requestId];
+                requestIdChecker[currentEpoch.epochNum][requestId] = true;
             } else {
-                isRequestIdUniq = previousRequestIdChecker.check(requestId);
+                isRequestIdReceived = requestIdChecker[previousEpoch.epochNum][requestId];
+                requestIdChecker[previousEpoch.epochNum][requestId] = true;
             }
 
-            if (isRequestIdUniq) {
+            if (!isRequestIdReceived) {
                 if (payload[payload.length - 1] == 0x01){
                     (bytes32 payload_, address sender, bool isHash) = abi.decode(receivedData, (bytes32, address, bool));
                     IReceiver(receiver).receiveHashData(sender, payload_);
@@ -281,9 +278,6 @@ contract BridgeV2 is IBridgeV2, IBridgeV3, AccessControlEnumerable, Typecast, Re
         previousEpoch = currentEpoch;
         Bls.Epoch memory epoch;
         currentEpoch = epoch;
-        previousRequestIdChecker.destroy();
-        previousRequestIdChecker = currentRequestIdChecker;
-        currentRequestIdChecker = new RequestIdChecker();
     }
 
     /**
