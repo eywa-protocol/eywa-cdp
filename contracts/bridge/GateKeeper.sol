@@ -172,9 +172,9 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         )), "GateKeeper: wrong data");
 
         if (isHash) {
-            params.data = abi.encode(keccak256(params.data), sender, isHash);
+            params.data = abi.encode(keccak256(params.data), sender, isHash ? bytes1(0x01) : bytes1(0x00));
         } else {
-            params.data = abi.encode(params.data, sender, isHash);
+            params.data = abi.encode(params.data, sender, isHash ? bytes1(0x01) : bytes1(0x00));
         }
 
         uint256 gasFee = IBridgeV3(bridge).estimateGasFee(
@@ -314,18 +314,16 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
             ));
         }
         
-        // TODO raise up require(). Fix stack too deep
         uint8 threshold_ = threshold[msg.sender];
         require(threshold_ > 0, "GateKeeper: zero threshold");
         address[] memory selectedBridges = _selectBridgesByPriority(threshold_);
 
         for (uint8 i; i < selectedBridges.length; ++i) {
             if (i == 0) {
-                bool isHash = false;
-                out = abi.encode(collectedData, msg.sender, isHash);
+
+                out = _encodeOut(abi.encode(collectedData, msg.sender), 0x00); // isHash false
             } else if (i == 1) {
-                bool isHash = true;
-                out = abi.encode(keccak256(collectedData), msg.sender, isHash);
+                out = _encodeOut(abi.encode(keccak256(collectedData), msg.sender), 0x01); // isHash true
             }
 
             _sendCustomBridge(
@@ -342,6 +340,15 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
             );
         }
         emit DataSent(selectedBridges, requestId, collectedData, to, chainIdTo, nonce, msg.sender);
+    }
+
+    function _encodeOut(bytes memory out, bytes1 isHash) internal returns(bytes memory newOut) {
+        uint256 length = out.length;
+        newOut = new bytes(length + 1);
+        for (uint j; j < length; ++j) {
+            newOut[j] = out[j];
+        }
+        newOut[length] = isHash;
     }
 
     /**

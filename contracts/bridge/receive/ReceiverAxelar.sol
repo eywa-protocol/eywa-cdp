@@ -9,7 +9,6 @@ import "../../interfaces/IReceiver.sol";
 import "../../interfaces/IAddressBook.sol";
 import "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
 
-
 contract ReceiverAxelar is AxelarExpressExecutable, AccessControlEnumerable {
 
     using StringToAddress for string;
@@ -49,11 +48,18 @@ contract ReceiverAxelar is AxelarExpressExecutable, AccessControlEnumerable {
         bytes calldata payload_
     ) internal override {
         require(peers[sourceChain] == sourceAddress.toAddress(), "ReceiverAxelar: wrong peer");
-        if (payload_[payload_.length - 1] == 0x01){
-            (bytes32 payload, address sender, bool isHash) = abi.decode(payload_, (bytes32, address, bool));
-            IReceiver(receiver).receiveHashData(sender, bytes32(payload));
+        uint256 length = payload_.length - 1;
+        bytes memory data = new bytes(length);
+        for (uint i; i < length; ++i) {
+            data[i] = payload_[i];
+        }
+
+        if (payload_[payload_.length - 1] == 0x01) {
+            require(data.length == 64, "ReceiverAxelar: Invalid message length");
+            (bytes32 payload, address sender) = abi.decode(data, (bytes32, address));
+            IReceiver(receiver).receiveHashData(sender, payload);
         } else if (payload_[payload_.length - 1] == 0x00) {
-            (bytes memory payload, address sender, bool isHash) = abi.decode(payload_, (bytes, address, bool));
+            (bytes memory payload, address sender) = abi.decode(data, (bytes, address));
             IReceiver(receiver).receiveData(sender, payload);
         } else {
             revert("ReceiverAxelar: wrong message");
