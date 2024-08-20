@@ -23,7 +23,7 @@ library ZeroCopySource {
      *  @return              The the read boolean value and new offset
      */
     function NextBool(bytes memory buff, uint256 offset) internal pure returns (bool, uint256) {
-        require(offset + 1 <= buff.length && offset < offset + 1, "Offset exceeds limit");
+        require(offset + 1 <= buff.length, "Offset exceeds limit");
         // byte === bytes1
         bytes1 v;
         assembly {
