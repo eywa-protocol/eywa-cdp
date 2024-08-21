@@ -211,11 +211,17 @@ contract BridgeV2 is IBridgeV2, IBridgeV3, AccessControlEnumerable, Typecast, Re
             }
 
             if (!isRequestIdReceived) {
-                if (payload[payload.length - 1] == 0x01){
-                    (bytes32 payload_, address sender, bool isHash) = abi.decode(receivedData, (bytes32, address, bool));
+                uint256 length = receivedData.length - 1;
+                payload = new bytes(length);
+                for (uint i; i < length; ++i) {
+                    payload[i] = receivedData[i];
+                }
+                if (receivedData[receivedData.length - 1] == 0x01){
+                    require(payload.length == 64, "ReceiverLZ: Invalid message length");
+                    (bytes32 payload_, address sender) = abi.decode(receivedData, (bytes32, address));
                     IReceiver(receiver).receiveHashData(sender, payload_);
-                } else if (payload[payload.length - 1] == 0x00) {
-                    (bytes memory payload_, address sender, bool isHash) = abi.decode(receivedData, (bytes, address, bool));
+                } else if (receivedData[receivedData.length - 1] == 0x00) {
+                    (bytes memory payload_, address sender) = abi.decode(receivedData, (bytes, address));
                     IReceiver(receiver).receiveData(sender, payload_);
                 } else {
                     revert("Bridge: wrong message");
@@ -223,10 +229,8 @@ contract BridgeV2 is IBridgeV2, IBridgeV3, AccessControlEnumerable, Typecast, Re
             } else {
                 revert("Bridge: request id already seen");
             }
-
             emit RequestReceived(requestId);
         }
-
         return true;
     }
 

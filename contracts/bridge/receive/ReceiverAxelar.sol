@@ -30,6 +30,12 @@ contract ReceiverAxelar is AxelarExpressExecutable, AccessControlEnumerable {
         receiver = receiver_;
     }
 
+    /**
+     * @dev Set peer for source chain
+     * 
+     * @param sourceChain_ source chain
+     * @param peer_ source peer address
+     */
     function setPeer(string calldata sourceChain_, address peer_) public onlyRole(OPERATOR_ROLE) {
         peers[sourceChain_] = peer_;
         emit PeerSet(sourceChain_, peer_);

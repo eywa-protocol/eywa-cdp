@@ -72,6 +72,14 @@ contract BridgeLZ is OAppSender, IBridgeV3, AccessControlEnumerable, ReentrancyG
         emit DstEidSet(chainIdTo_, dstEid_);
     }
 
+    /**
+     * @dev Send params to chainIdTo
+     * 
+     * @param params  params, which will be sent
+     * @param sender  protocol which uses bridge
+     * @param nonce  nonce 
+     * @param options  additional call options
+     */
     function sendV3(
         IBridgeV2.SendParams calldata params,
         address sender,
@@ -123,6 +131,13 @@ contract BridgeLZ is OAppSender, IBridgeV3, AccessControlEnumerable, ReentrancyG
         return _quote(_dstEid, _data, _options, _payInLzToken).nativeFee;
     }
 
+    /**
+     * @dev Quote price for LZ bridge
+     * 
+     * @param params send params
+     * @param sender protocol which uses bridge
+     * @param options additional call options
+     */
     function estimateGasFee(
         IBridgeV2.SendParams calldata params,
         address sender,

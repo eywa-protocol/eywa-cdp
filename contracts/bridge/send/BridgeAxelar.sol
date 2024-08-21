@@ -46,6 +46,8 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, AccessControlEnumer
         gasService = IAxelarGasService(gasService_);
     }
 
+    receive() external payable {}
+
     /**
      * @dev Set network for chainId
      * 
@@ -104,6 +106,13 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, AccessControlEnumer
         );
     }
 
+    /**
+     * @dev Estimate price for Axelar bridge
+     * 
+     * @param params send params
+     * @param sender protocol which uses bridge
+     * @param options_ additional call options
+     */
     function estimateGasFee(
         IBridgeV2.SendParams calldata params,
         address sender,
@@ -125,15 +134,14 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, AccessControlEnumer
         );
     }
     
-
-    // /**
-    //  * @dev Send data to receiver in chainIdTo
-    //  * 
-    //  * @param data  data, which will be sent
-    //  * @param chainIdTo  destination chain id 
-    //  * @param spentValue value which will be spent for axelar delivery
-    //  * @param commission gas and eth value for destination execution
-    //  */
+    /**
+     * @dev Send params to chainIdTo
+     * 
+     * @param params  params, which will be sent
+     * @param sender  protocol which uses bridge
+     * @param nonce  nonce 
+     * @param options  additional call options
+     */
     function sendV3(
         IBridgeV2.SendParams calldata params,
         address sender,
@@ -143,12 +151,13 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, AccessControlEnumer
         _send(params, sender, options);
     }
 
-    // /**
-    //  * @dev Send data to receiver in chainIdTo
-    //  * 
-    //  * @param data  data, which will be sent
-    //  * @param chainIdTo_  destination chain id 
-    //  */
+    /**
+     * @dev Send params to chainIdTo
+     * 
+     * @param params  params, which will be sent
+     * @param sender  protocol which uses bridge
+     * @param options_  additional call options
+     */
     function _send(
         IBridgeV2.SendParams calldata params,
         address sender,
@@ -171,6 +180,16 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, AccessControlEnumer
         );
     }
 
+    /**
+     * @dev Unpack params for Axelar bridge usage
+     * 
+     * @param params send params
+     * @param options_ additional options packed
+     * @return destinationChain destionation chain in string type
+     * @return destinationAddress destination address in string type
+     * @return gasLimit gas limit for destination tx
+     * @return options additional options for destination call
+     */
     function _unpackParams(IBridgeV2.SendParams calldata params, bytes memory options_) internal view
         returns(
             string memory destinationChain,
@@ -184,13 +203,23 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, AccessControlEnumer
             (gasLimit, options) = abi.decode(options_, (uint256, bytes));
         }
 
+    /**
+     * @dev Pay gas for Axelar bridge usage
+     * 
+     * @param chainId chain id to
+     * @param destinationAddress destionation address
+     * @param data  send data
+     * @param gasLimit gas limit of destination tx
+     * @param sender protocol address
+     * @param options additional options
+     */
     function _payGas(
         string memory chainId,
         string memory destinationAddress,
         bytes memory data,
         uint256 gasLimit,
         address sender,
-        bytes memory params
+        bytes memory options
     ) internal {
         gasService.payGas{value: msg.value} (
             address(this),
@@ -200,11 +229,7 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, AccessControlEnumer
             gasLimit,
             false,
             sender,
-            params
+            options
         );
-    }
-
-    receive() external payable {
-
     }
 }

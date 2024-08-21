@@ -91,7 +91,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     receive() external payable { }
 
     /**
-     * @notice Sets the base fee for a given chain ID and token address.
+     * @dev Sets the base fee for a given chain ID and token address.
      * The base fee represents the minimum amount of pay {TOKEN} required as transaction fee.
      *
      * @param baseFees_ The array of the BaseFee structs.
@@ -105,7 +105,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     }
 
     /**
-     * @notice Register protocol, deploy trasury for it
+     * @dev Register protocol, deploy trasury for it
      * 
      * @param treasuryAdmin_ admin of treasury, which can withdraw
      * @param protocol_ Protocol address who will use treasury
@@ -117,7 +117,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     }
 
     /**
-     * @notice Sets the rate for a given chain ID and token address.
+     * @dev Sets the rate for a given chain ID and token address.
      * The rate will be applied based on the length of the data being transmitted between the chains.
      *
      * @param rates_ The array of the Rate structs.
@@ -131,7 +131,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     }
 
     /**
-     * @notice Sets the discount for a given protocol. Have to be in [0, 10000], where 10000 is 100%.
+     * @dev Sets the discount for a given protocol. Have to be in [0, 10000], where 10000 is 100%.
      *
      * @param protocol The address of the protocol for which the discount is being set;
      * @param discount The discount being set.
@@ -143,7 +143,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     }
 
     /**
-     * @notice Calculates the cost for a cross-chain operation in the specified token.
+     * @dev Calculates the cost for a cross-chain operation in the specified token.
      *
      * @param dataLength The length of the data being transmitted in the cross-chain operation;
      * @param chainIdTo The ID of the destination chain;
@@ -164,7 +164,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     }
 
     /**
-     * @notice Retry transaction, that was send. Send it only with same params
+     * @dev Retry transaction, that was send. Send it only with same params
      * 
      * @param params send params
      * @param nonce nonce
@@ -211,7 +211,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     }
 
     /**
-     * @notice Allows the owner to withdraw collected fees from the contract. Use address(0) to
+     * @dev Allows the owner to withdraw collected fees from the contract. Use address(0) to
      * withdraw native asset.
      *
      * @param token The token address from which the fees need to be withdrawn;
@@ -229,7 +229,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     }
 
     /**
-     * @notice Sets protocol's threshold. Must be the same on the receiver's side.
+     * @dev Sets protocol's threshold. Must be the same on the receiver's side.
      *
      * @param protocol The protocol protocol contract address;
      * @param threshold_ The threshold for the given contract address.
@@ -245,7 +245,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     }
 
     /**
-     * @notice Set bridge registration
+     * @dev Set bridge registration
      * 
      * @param bridge  bridge address
      * @param status  new status
@@ -257,7 +257,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     }
 
     /**
-     * @notice Updates bridge priority. 
+     * @dev Updates bridge priority. 
      * 
      * @param protocol_ protocol address
      * @param chainIds_ List of chainIds for each pair protocol + chainId may be different bridge priority
@@ -367,7 +367,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     }
 
     /**
-     * @notice Encode out data, add isHash bytes to end
+     * @dev Encode out data, add isHash bytes to end
      * 
      * @param out  out data
      * @param isHash is hash flag
@@ -382,7 +382,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     }
 
     /**
-     * @notice Calculates the final amount to be paid after applying a discount percentage to the original amount.
+     * @dev Calculates the final amount to be paid after applying a discount percentage to the original amount.
      *
      * @param amount The original amount to be paid;
      * @param basePercent The percentage of discount to be applied;
@@ -399,7 +399,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     }
 
     /**
-     * @notice Select bridge by priority and by threshold
+     * @dev Select bridge by priority and by threshold
      * 
      * @param protocol threshold for current protocol and chainIdTo
      * @param chainIdTo chain id to send
@@ -417,29 +417,45 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         return selectedBridges;
     }
 
+    /**
+     * @dev Send data by custom bridge
+     * 
+     * @param bridge bridge address
+     * @param params params to send
+     * @param nonce nonce 
+     * @param protocol protocol address
+     * @param options  additional options for bridge call
+     */
     function _sendCustomBridge(
         address bridge,
         IBridgeV2.SendParams memory params,
         uint256 nonce,
-        address sender,
+        address protocol,
         bytes memory options
     ) internal returns(uint256) {
         uint256 gasFee = IBridgeV3(bridge).estimateGasFee(
             params,
-            sender,
+            protocol,
             options
         );
-        uint256 additionalFee = calculateAdditionalFee(params.data.length, uint64(params.chainIdTo), bridge, msg.sender);
-        INativeTreasury(treasuries[msg.sender]).getValue(gasFee + additionalFee);
+        uint256 additionalFee = calculateAdditionalFee(params.data.length, uint64(params.chainIdTo), bridge, protocol);
+        INativeTreasury(treasuries[protocol]).getValue(gasFee + additionalFee);
         IBridgeV3(bridge).sendV3{value: gasFee}(
             params,
-            sender,
+            protocol,
             nonce,
             options
         );
         return gasFee;
     }
 
+    /**
+     * @dev divides options for current and encodes next.
+     * 
+     * @param options_ options
+     * @return current options
+     * @return encoded next options
+     */
     function _popOptions(bytes memory options_) internal pure returns (bytes[] memory, bytes memory) {
         bytes[][] memory options = abi.decode(options_,  (bytes[][]));
         bytes[] memory currentOptions = options[options.length - 1];
@@ -452,6 +468,12 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         return (currentOptions, abi.encode(nextOptions));
     }
 
+    /**
+     * @dev Pack address and uint64 to bytes32 as a key
+     * 
+     * @param addr  address
+     * @param number number
+     */
     function _packKey(address addr, uint64 number) internal pure returns(bytes32) {
         bytes32 packedKey = bytes32(uint256(uint160(addr)) << 64);
         packedKey |= bytes32(uint256(number));
