@@ -166,7 +166,6 @@ library ZeroCopySource {
                 // Get a location of some free memory and store it in tempBytes as
                 // Solidity does for memory variables.
                 tempBytes := mload(0x40)
-
                 // The first word of the slice result is potentially a partial
                 // word read from the original array. To read it, we calculate
                 // the length of that partial word and start copying that many
@@ -204,7 +203,7 @@ library ZeroCopySource {
             //if we want a zero-length slice let's just return a zero-length array
             default {
                 tempBytes := mload(0x40)
-
+                mstore(tempBytes, 0)
                 mstore(0x40, add(tempBytes, 0x20))
             }
         }
