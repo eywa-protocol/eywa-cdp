@@ -43,18 +43,18 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     mapping(uint64 => mapping(address => uint256)) public baseFees;
     /// @dev chainId => pay token => rate (per byte)
     mapping(uint64 => mapping(address => uint256)) public rates;
-    /// @dev caller => discounts, [0, 10000]
+    /// @dev protocol => discounts, [0, 10000]
     mapping(address => uint256) public discounts;
     /// @dev nonce for senders
     mapping(address => uint256) public nonces;
     // @dev brdige => is registered
     mapping(address => bool) public registeredBridges;  
-    // @dev caller => treasury
+    // @dev protocol => treasury
     mapping(address => address) public treasuries; 
     // @dev array of sorted by priorities bridges. Bytes32 = protocol address + chainIdTo
     mapping(bytes32 => address[]) public bridges;
     /// @dev protocol -> threshold
-    mapping(address => uint8) public threshold;
+    mapping(bytes32 => uint8) public threshold;
     /// @dev msg.sender -> nonce -> hash of data
     mapping(address => mapping(uint256 => bytes32)) public sentDataHash;
 
@@ -62,9 +62,9 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     event BridgeSet(address bridge);
     event BaseFeeSet(uint64 chainId, address bridge, uint256 fee);
     event RateSet(uint64 chainId, address bridge, uint256 rate);
-    event DiscountSet(address caller, uint256 discount);
+    event DiscountSet(address protocol, uint256 discount);
     event FeesWithdrawn(address token, uint256 amount, address to);
-    event ThresholdSet(address sender, uint8 threshold);
+    event ThresholdSet(address sender, uint64[] chainIds, uint8[] threshold);
     event BridgeRegistered(address bridge, bool status);
     event BridgesPriorityUpdated(address protocol, uint64[] chainIds, address[][] bridges);
     event DataSent(
@@ -104,10 +104,16 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         }
     }
 
-    function registerCaller(address treasuryAdmin_, address caller_) external {
-        require(treasuries[caller_] == address(0), "GateKeeper: caller registered");
+    /**
+     * @notice Register protocol, deploy trasury for it
+     * 
+     * @param treasuryAdmin_ admin of treasury, which can withdraw
+     * @param protocol_ Protocol address who will use treasury
+     */
+    function registerProtocol(address treasuryAdmin_, address protocol_) external {
+        require(treasuries[protocol_] == address(0), "GateKeeper: protocol registered");
         address treasury = address(new NativeTreasury(treasuryAdmin_));
-        treasuries[caller_] = treasury;
+        treasuries[protocol_] = treasury;
     }
 
     /**
@@ -125,15 +131,15 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     }
 
     /**
-     * @notice Sets the discount for a given caller. Have to be in [0, 10000], where 10000 is 100%.
+     * @notice Sets the discount for a given protocol. Have to be in [0, 10000], where 10000 is 100%.
      *
-     * @param caller The address of the caller for which the discount is being set;
+     * @param protocol The address of the protocol for which the discount is being set;
      * @param discount The discount being set.
      */
-    function setDiscount(address caller, uint256 discount) external onlyRole(OPERATOR_ROLE) {
+    function setDiscount(address protocol, uint256 discount) external onlyRole(OPERATOR_ROLE) {
         require(discount <= 10000, "GateKeeper: wrong discount");
-        discounts[caller] = discount;
-        emit DiscountSet(caller, discount);
+        discounts[protocol] = discount;
+        emit DiscountSet(protocol, discount);
     }
 
     /**
@@ -141,22 +147,32 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
      *
      * @param dataLength The length of the data being transmitted in the cross-chain operation;
      * @param chainIdTo The ID of the destination chain;
-     * @param caller The address of the caller requesting the cross-chain operation;
+     * @param protocol The address of the protocol requesting the cross-chain operation;
      * @return amountToPay The fee amount to be paid for the cross-chain operation.
      */
     function calculateAdditionalFee(
         uint256 dataLength,
         uint64 chainIdTo,
         address bridge,
-        address caller
+        address protocol
     ) public view returns (uint256 amountToPay) {
         uint256 baseFee = baseFees[chainIdTo][bridge];
         uint256 rate = rates[chainIdTo][bridge];
         require(baseFee != 0, "GateKeeper: base fee not set");
         require(rate != 0, "GateKeeper: rate not set");
-        (amountToPay) = _getPercentValues(baseFee + (dataLength * rate), discounts[caller]);
+        (amountToPay) = _getPercentValues(baseFee + (dataLength * rate), discounts[protocol]);
     }
 
+    /**
+     * @notice Retry transaction, that was send. Send it only with same params
+     * 
+     * @param params send params
+     * @param nonce nonce
+     * @param sender protocol address
+     * @param bridge bridge to retry send
+     * @param currentOptions options of current call. Can be differ from first call
+     * @param isHash flag for choose send data or hash
+     */
     function retry(
         IBridgeV2.SendParams memory params,
         uint256 nonce,
@@ -213,26 +229,43 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     }
 
     /**
-     * @notice Sets caller's threshold. Must be the same on the receiver's side.
+     * @notice Sets protocol's threshold. Must be the same on the receiver's side.
      *
-     * @param caller The caller protocol contract address;
+     * @param protocol The protocol protocol contract address;
      * @param threshold_ The threshold for the given contract address.
      */
-    function setThreshold(address caller, uint8 threshold_) external onlyRole(OPERATOR_ROLE) {
-        require(threshold_ >= 1, "GateKeeper: wrong threshold");
-        threshold[caller] = threshold_;
-        emit ThresholdSet(caller, threshold_);
+    function setThreshold(address protocol, uint64[] memory chainIdTo, uint8[] memory threshold_) external onlyRole(OPERATOR_ROLE) {
+        uint256 length = chainIdTo.length;
+        require(length == threshold_.length, "GateKeeper: wrong lengths");
+        for (uint256 i; i < length; ++i) {
+            require(threshold_[i] >= 1, "GateKeeper: wrong threshold");
+            threshold[_packKey(protocol, chainIdTo[i])] = threshold_[i];
+        }
+        emit ThresholdSet(protocol, chainIdTo, threshold_);
     }
 
+    /**
+     * @notice Set bridge registration
+     * 
+     * @param bridge  bridge address
+     * @param status  new status
+     */
     function updateBridgeRegistration(address bridge, bool status) external onlyRole(OPERATOR_ROLE) {
         require(bridge != address(0), "GateKeeper: zero address");
         registeredBridges[bridge] = status;
         emit BridgeRegistered(bridge, status);
     }
 
+    /**
+     * @notice Updates bridge priority. 
+     * 
+     * @param protocol_ protocol address
+     * @param chainIds_ List of chainIds for each pair protocol + chainId may be different bridge priority
+     * @param bridges_ sorted by priority array for each chainId. First elem higher priority, then last
+     */
     function updateBridgesPriority(address protocol_, uint64[] memory chainIds_, address[][] memory bridges_) external onlyRole(OPERATOR_ROLE) {
         uint256 length = chainIds_.length;
-        require(chainIds_.length == bridges_.length, "GateKeeper: wrong lengths");
+        require(length == bridges_.length, "GateKeeper: wrong lengths");
         for (uint256 i; i < length; ++i) {
             bridges[_packKey(protocol_, chainIds_[i])] = bridges_[i];
         }
@@ -243,7 +276,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
      * @dev Sends data to a destination contract on a specified chain using the opposite BridgeV2 contract.
      * If payToken is address(0), the payment is made in Ether, otherwise it is made using the ERC20 token 
      * at the specified address.
-     * The payment amount is calculated based on the data length and the specified chain ID and discount rate of the caller.
+     * The payment amount is calculated based on the data length and the specified chain ID and discount rate of the protocol.
      *
      * Emits a PaymentReceived event after the payment has been processed.
      *
@@ -308,9 +341,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
             ));
         }
         
-        uint8 threshold_ = threshold[msg.sender];
-        require(threshold_ > 0, "GateKeeper: zero threshold");
-        address[] memory selectedBridges = _selectBridgesByPriority(threshold_, chainIdTo, msg.sender);
+        address[] memory selectedBridges = _selectBridgesByPriority(msg.sender, chainIdTo);
 
         for (uint8 i; i < selectedBridges.length; ++i) {
             if (i == 0) {
@@ -335,6 +366,12 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         emit DataSent(selectedBridges, requestId, collectedData, to, chainIdTo, nonce, msg.sender);
     }
 
+    /**
+     * @notice Encode out data, add isHash bytes to end
+     * 
+     * @param out  out data
+     * @param isHash is hash flag
+     */
     function _encodeOut(bytes memory out, bytes1 isHash) internal pure returns(bytes memory newOut) {
         uint256 length = out.length;
         newOut = new bytes(length + 1);
@@ -361,10 +398,19 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         amountToPay = amount - discount;
     }
 
-    function _selectBridgesByPriority(uint8 threshold_, uint64 chainIdTo, address protocol) private view returns(address[] memory) {
+    /**
+     * @notice Select bridge by priority and by threshold
+     * 
+     * @param protocol threshold for current protocol and chainIdTo
+     * @param chainIdTo chain id to send
+     */
+    function _selectBridgesByPriority(address protocol, uint64 chainIdTo) private view returns(address[] memory) {
+        bytes32 key = _packKey(protocol, chainIdTo);
+        uint8 threshold_ = threshold[key];
+        require(threshold_ > 0, "GateKeeper: zero threshold");
         address[] memory selectedBridges = new address[](threshold_);
         for (uint8 i; i < threshold_; ++i) {
-            address currentBridge = bridges[_packKey(protocol, chainIdTo)][i];
+            address currentBridge = bridges[key][i];
             require(registeredBridges[currentBridge], "GateKeeper: bridge not registered");
             selectedBridges[i] = currentBridge;
         }
