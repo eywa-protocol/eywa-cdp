@@ -11,12 +11,11 @@ import { AxelarExpressExecutable } from "@axelar-network/axelar-gmp-sdk-solidity
 import { IAxelarGateway } from "@axelar-network/axelar-gmp-sdk-solidity/contracts/interfaces/IAxelarGateway.sol";
 import { IAxelarGasService } from "@axelar-network/axelar-gmp-sdk-solidity/contracts/interfaces/IAxelarGasService.sol";
 import { IGateKeeper } from "../../interfaces/IGateKeeper.sol";
-import "../../interfaces/IBridgeV3.sol";
-import "../../interfaces/IBridgeV2.sol";
+import "../../interfaces/IBridge.sol";
 import "../../interfaces/INativeTreasury.sol";
 
 
-contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, AccessControlEnumerable, ReentrancyGuard {
+contract BridgeAxelar is AxelarExpressExecutable, IBridge, AccessControlEnumerable, ReentrancyGuard {
     
     using Address for address;
     
@@ -25,7 +24,7 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, AccessControlEnumer
     /// @dev operator role id
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
     /// @dev current state Active\Inactive
-    IBridgeV2.State public state;
+    IBridge.State public state;
     /// @dev nonces
     mapping(address => uint256) public nonces;
     /// @dev chainIdTo => dstEid
@@ -35,13 +34,13 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, AccessControlEnumer
     /// @dev Axelar gas service
     IAxelarGasService public immutable gasService;
 
-    event StateSet(IBridgeV2.State state);
+    event StateSet(IBridge.State state);
     event NetworkSet(uint64 chainIdTo, string network);
     event ReceiverSet(uint64 chainIdTo, address receiver);
 
     constructor(address gateway_, address gasService_) AxelarExpressExecutable(gateway_) {
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
-        state = IBridgeV2.State.Active;
+        state = IBridge.State.Active;
 
         gasService = IAxelarGasService(gasService_);
     }
@@ -76,7 +75,7 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, AccessControlEnumer
      *
      * @param state_ Active\Inactive state
      */
-    function setState(IBridgeV2.State state_) external onlyRole(OPERATOR_ROLE) {
+    function setState(IBridge.State state_) external onlyRole(OPERATOR_ROLE) {
         state = state_;
         emit StateSet(state);
     }
@@ -114,7 +113,7 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, AccessControlEnumer
      * @param options_ additional call options
      */
     function estimateGasFee(
-        IBridgeV2.SendParams calldata params,
+        IBridge.SendParams calldata params,
         address sender,
         bytes memory options_
     ) public view returns (uint256) {
@@ -143,11 +142,11 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, AccessControlEnumer
      * @param options  additional call options
      */
     function sendV3(
-        IBridgeV2.SendParams calldata params,
+        IBridge.SendParams calldata params,
         address sender,
         uint256 nonce,
         bytes memory options
-    ) public payable override onlyRole(GATEKEEPER_ROLE) {
+    ) public payable onlyRole(GATEKEEPER_ROLE) {
         _send(params, sender, options);
     }
 
@@ -159,11 +158,11 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, AccessControlEnumer
      * @param options_  additional call options
      */
     function _send(
-        IBridgeV2.SendParams calldata params,
+        IBridge.SendParams calldata params,
         address sender,
         bytes memory options_
-    ) internal returns (bool) {
-        require(state == IBridgeV2.State.Active, "BridgeAxelar: state inactive");
+    ) internal {
+        require(state == IBridge.State.Active, "BridgeAxelar: state inactive");
 
         (
             string memory destinationChain,
@@ -190,7 +189,7 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridgeV3, AccessControlEnumer
      * @return gasLimit gas limit for destination tx
      * @return options additional options for destination call
      */
-    function _unpackParams(IBridgeV2.SendParams calldata params, bytes memory options_) internal view
+    function _unpackParams(IBridge.SendParams calldata params, bytes memory options_) internal view
         returns(
             string memory destinationChain,
             string memory destinationAddress,

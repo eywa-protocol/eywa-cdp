@@ -7,10 +7,9 @@ import "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import { OAppSender, OAppCore, Origin, MessagingFee } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OApp.sol";
 import { IGateKeeper } from "../../interfaces/IGateKeeper.sol";
-import "../../interfaces/IBridgeV3.sol";
-import "../../interfaces/IBridgeV2.sol";
+import "../../interfaces/IBridge.sol";
 import "../../interfaces/INativeTreasury.sol";
-contract BridgeLZ is OAppSender, IBridgeV3, AccessControlEnumerable, ReentrancyGuard {
+contract BridgeLZ is OAppSender, IBridge, AccessControlEnumerable, ReentrancyGuard {
     
     using Address for address;
     
@@ -19,19 +18,19 @@ contract BridgeLZ is OAppSender, IBridgeV3, AccessControlEnumerable, ReentrancyG
     /// @dev operator role id
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
     /// @dev current state Active\Inactive
-    IBridgeV2.State public state;
+    IBridge.State public state;
     /// @dev nonces
     mapping(address => uint256) public nonces;
     /// @dev chainIdTo => dstEid
     mapping(uint64 => uint32) public dstEids;
 
-    event StateSet(IBridgeV2.State state);
+    event StateSet(IBridge.State state);
     event TreasurySet(address treasury);
     event DstEidSet(uint256 chainIdTo, uint32 dstEid);
 
     constructor(address _endpoint, address _owner) OAppCore(_endpoint, _owner) {
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
-        state = IBridgeV2.State.Active;
+        state = IBridge.State.Active;
     }
 
     /**
@@ -54,7 +53,7 @@ contract BridgeLZ is OAppSender, IBridgeV3, AccessControlEnumerable, ReentrancyG
      *
      * @param state_ Active\Inactive state
      */
-    function setState(IBridgeV2.State state_) external onlyRole(OPERATOR_ROLE) {
+    function setState(IBridge.State state_) external onlyRole(OPERATOR_ROLE) {
         state = state_;
         emit StateSet(state);
     }
@@ -81,11 +80,11 @@ contract BridgeLZ is OAppSender, IBridgeV3, AccessControlEnumerable, ReentrancyG
      * @param options  additional call options
      */
     function sendV3(
-        IBridgeV2.SendParams calldata params,
+        IBridge.SendParams calldata params,
         address sender,
         uint256 nonce,
         bytes memory options
-    ) public payable override onlyRole(GATEKEEPER_ROLE) {
+    ) public payable onlyRole(GATEKEEPER_ROLE) {
         _send(params.data, uint64(params.chainIdTo), sender, options);
     }
 
@@ -101,7 +100,7 @@ contract BridgeLZ is OAppSender, IBridgeV3, AccessControlEnumerable, ReentrancyG
         address sender,
         bytes memory options
     ) internal returns (bool) {
-        require(state == IBridgeV2.State.Active, "Bridge: state inactive");
+        require(state == IBridge.State.Active, "Bridge: state inactive");
 
         uint32 dstEid = dstEids[chainIdTo];
         MessagingFee memory gasFee = _quote(dstEid, data, options, false);
@@ -139,7 +138,7 @@ contract BridgeLZ is OAppSender, IBridgeV3, AccessControlEnumerable, ReentrancyG
      * @param options additional call options
      */
     function estimateGasFee(
-        IBridgeV2.SendParams calldata params,
+        IBridge.SendParams calldata params,
         address sender,
         bytes memory options
     ) public view returns(uint256) {

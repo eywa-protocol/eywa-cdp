@@ -5,7 +5,6 @@ pragma solidity ^0.8.17;
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "../interfaces/IBridgeV2.sol";
 import "../interfaces/IBridgeV3.sol";
 import "../interfaces/IReceiver.sol";
 import "../interfaces/IGateKeeper.sol";
@@ -14,7 +13,7 @@ import "../utils/Bls.sol";
 import "../utils/Merkle.sol";
 import "../utils/Typecast.sol";
 
-contract BridgeV2 is IBridgeV2, IBridgeV3, AccessControlEnumerable, Typecast, ReentrancyGuard {
+contract BridgeV3 is IBridgeV3, AccessControlEnumerable, Typecast, ReentrancyGuard {
     
     using Address for address;
     using Bls for Bls.Epoch;
@@ -119,15 +118,16 @@ contract BridgeV2 is IBridgeV2, IBridgeV3, AccessControlEnumerable, Typecast, Re
     }
 
     /**
-     * @dev Send crosschain request v2.
+     * @dev Send crosschain request v3.
      *
      * @param params struct with requestId, data, receiver and opposite cahinId
      */
-    function sendV2(
+    function sendV3(
         SendParams calldata params,
         address sender,
-        uint256 nonce
-    ) public override onlyRole(GATEKEEPER_ROLE) returns (bool) {
+        uint256 nonce,
+        bytes memory options
+    ) external payable onlyRole(GATEKEEPER_ROLE) {
         require(state == State.Active, "Bridge: state inactive");
         require(previousEpoch.isSet() || currentEpoch.isSet(), "Bridge: epoch not set");
         require(nonce > nonces[sender], "Bridge: wrong nonce");
@@ -139,22 +139,6 @@ contract BridgeV2 is IBridgeV2, IBridgeV3, AccessControlEnumerable, Typecast, Re
             params.to,
             uint64(params.chainIdTo)
         );
-
-        return true;
-    }
-
-    /**
-     * @dev Send crosschain request v3.
-     *
-     * @param params struct with requestId, data, receiver and opposite cahinId
-     */
-    function sendV3(
-        SendParams calldata params,
-        address sender,
-        uint256 nonce,
-        bytes memory options
-    ) external payable onlyRole(GATEKEEPER_ROLE) {
-        sendV2(params,sender, nonce);
     }
 
     function estimateGasFee(
@@ -175,7 +159,7 @@ contract BridgeV2 is IBridgeV2, IBridgeV3, AccessControlEnumerable, Typecast, Re
      *
      * @param params array with ReceiveParams structs.
      */
-    function receiveV2(ReceiveParams[] calldata params) external override onlyRole(VALIDATOR_ROLE) nonReentrant returns (bool) {
+    function receiveV3(ReceiveParams[] calldata params) external override onlyRole(VALIDATOR_ROLE) nonReentrant returns (bool) {
         require(state != State.Inactive, "Bridge: state inactive");
 
         for (uint256 i = 0; i < params.length; ++i) {

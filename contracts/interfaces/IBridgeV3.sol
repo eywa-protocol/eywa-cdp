@@ -2,21 +2,24 @@
 // Copyright (c) Eywa.Fi, 2021-2024 - all rights reserved
 pragma solidity ^0.8.17;
 
-import './IBridgeV2.sol';
+import "../interfaces/IBridge.sol";
 
-interface IBridgeV3 {
+interface IBridgeV3 is IBridge {
+    
+    struct ReceiveParams {
+        /// @param blockHeader block header serialization
+        bytes blockHeader;
+        /// @param merkleProof OracleRequest transaction payload and its Merkle audit path
+        bytes merkleProof;
+        /// @param votersPubKey aggregated public key of the old epoch participants, who voted for the block
+        bytes votersPubKey;
+        /// @param votersSignature aggregated signature of the old epoch participants, who voted for the block
+        bytes votersSignature;
+        /// @param votersMask bitmask of epoch participants, who voted, among all participants
+        uint256 votersMask;
+    }
 
-    function sendV3(
-        IBridgeV2.SendParams memory params,
-        address sender,
-        uint256 nonce,
-        bytes memory options
-    ) external payable;
+    function receiveV3(ReceiveParams[] calldata params) external returns (bool);
 
-    function estimateGasFee(
-        IBridgeV2.SendParams memory  params,
-        address sender,
-        bytes memory options
-    ) external returns (uint256);
-
+    function nonces(address sender) external returns(uint256);
 }

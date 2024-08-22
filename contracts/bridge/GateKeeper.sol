@@ -8,8 +8,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "../utils/Typecast.sol";
 import "../utils/RequestIdLib.sol";
-import "../interfaces/IBridgeV3.sol";
-import "../interfaces/IBridgeV2.sol";
+import "../interfaces/IBridge.sol";
 import "../interfaces/IGateKeeper.sol";
 import "../interfaces/IAddressBook.sol";
 import "../interfaces/IValidatedDataReciever.sol";
@@ -78,7 +77,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     );
     event RetrySent(
         address bridge, 
-        IBridgeV2.SendParams params,
+        IBridge.SendParams params,
         uint256 nonce, 
         address sender
     );
@@ -166,7 +165,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     /**
      * @dev Retry transaction, that was send. Send it only with same params
      * 
-     * @param params send params
+     * @param params send params. params.data must be collectedData
      * @param nonce nonce
      * @param sender protocol address
      * @param bridge bridge to retry send
@@ -174,7 +173,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
      * @param isHash flag for choose send data or hash
      */
     function retry(
-        IBridgeV2.SendParams memory params,
+        IBridge.SendParams memory params,
         uint256 nonce,
         address sender,
         address bridge,
@@ -188,17 +187,17 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         )), "GateKeeper: wrong data");
 
         if (isHash) {
-            params.data = abi.encode(keccak256(params.data), sender, isHash ? bytes1(0x01) : bytes1(0x00));
+            params.data = _encodeOut(abi.encode(keccak256(params.data), sender), 0x01);
         } else {
-            params.data = abi.encode(params.data, sender, isHash ? bytes1(0x01) : bytes1(0x00));
+            params.data = _encodeOut(abi.encode(params.data, sender), 0x00);
         }
 
-        uint256 gasFee = IBridgeV3(bridge).estimateGasFee(
+        uint256 gasFee = IBridge(bridge).estimateGasFee(
             params,
             sender,
             currentOptions
         );
-        IBridgeV3(bridge).sendV3{value: gasFee}(
+        IBridge(bridge).sendV3{value: gasFee}(
             params,
             sender,
             nonce,
@@ -330,9 +329,9 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
                 to
             );
             sentDataHash[msg.sender][nonce] = keccak256(abi.encode(
-                IBridgeV2.SendParams({
+                IBridge.SendParams({
                         requestId: requestId,
-                        data: abi.encodeWithSelector(selector, data, nextOptions),
+                        data: collectedData,
                         to: to,
                         chainIdTo: chainIdTo
                 }), 
@@ -352,7 +351,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
 
             _sendCustomBridge(
                 selectedBridges[i], 
-                IBridgeV2.SendParams({
+                IBridge.SendParams({
                         requestId: requestId,
                         data: out,
                         to: to,
@@ -428,19 +427,19 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
      */
     function _sendCustomBridge(
         address bridge,
-        IBridgeV2.SendParams memory params,
+        IBridge.SendParams memory params,
         uint256 nonce,
         address protocol,
         bytes memory options
     ) internal returns(uint256) {
-        uint256 gasFee = IBridgeV3(bridge).estimateGasFee(
+        uint256 gasFee = IBridge(bridge).estimateGasFee(
             params,
             protocol,
             options
         );
         uint256 additionalFee = calculateAdditionalFee(params.data.length, uint64(params.chainIdTo), bridge, protocol);
         INativeTreasury(treasuries[protocol]).getValue(gasFee + additionalFee);
-        IBridgeV3(bridge).sendV3{value: gasFee}(
+        IBridge(bridge).sendV3{value: gasFee}(
             params,
             protocol,
             nonce,
