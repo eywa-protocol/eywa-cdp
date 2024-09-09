@@ -21,7 +21,7 @@ contract ReceiverAxelar is AxelarExpressExecutable, AccessControlEnumerable {
 
     mapping(string sourceChain => address peer) public peers;
     event PeerSet(string sourceChain, address peer);
-    event RequestReceived(bytes32 requestId);
+    event RequestReceived(bytes32 requestId, bytes1 isHash);
 
     constructor(address gateway_, address gasService_, address receiver_) AxelarExpressExecutable(gateway_) {
         require(gateway_ != address(0), "ReceiverAxelar: zero address");
@@ -68,13 +68,14 @@ contract ReceiverAxelar is AxelarExpressExecutable, AccessControlEnumerable {
             bytes32 payload;
             (payload, sender, requestId) = abi.decode(data, (bytes32, address, bytes32));
             IReceiver(receiver).receiveHashData(sender, payload, requestId);
+            emit RequestReceived(requestId, 0x01);
         } else if (payload_[payload_.length - 1] == 0x00) {
             bytes memory payload;
             (payload, sender, requestId) = abi.decode(data, (bytes, address, bytes32));
             IReceiver(receiver).receiveData(sender, payload, requestId);
+            emit RequestReceived(requestId, 0x00);
         } else {
             revert("ReceiverAxelar: wrong message");
         }
-        emit RequestReceived(requestId);
     }
 }
