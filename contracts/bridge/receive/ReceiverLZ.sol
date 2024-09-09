@@ -17,6 +17,8 @@ contract ReceiverLZ is OAppReceiver, AccessControlEnumerable {
     /// @dev address of main receiver, that stores data and hashes
     address public immutable receiver;
 
+    event RequestReceived(bytes32 requestId);
+
     constructor(address endpoint_,  address receiver_) OAppCore(endpoint_, msg.sender) {
         require(endpoint_ != address(0), "ReceiverLZ: zero address");
         require(receiver_ != address(0), "ReceiverLZ: zero address");
@@ -55,20 +57,25 @@ contract ReceiverLZ is OAppReceiver, AccessControlEnumerable {
         address executor_,
         bytes calldata extraData_
     ) internal override {
+        bytes32 requestId;
+        address sender;
         uint256 length = message_.length - 1;
         bytes memory message = new bytes(length);
         for (uint i; i < length; ++i) {
             message[i] = message_[i];
         }
         if (message_[message_.length - 1] == 0x01){
-            require(message.length == 64, "ReceiverLZ: Invalid message length");
-            (bytes32 payload, address sender) = abi.decode(message, (bytes32, address));
-            IReceiver(receiver).receiveHashData(sender, payload);
+            require(message.length == 96, "ReceiverLZ: Invalid message length");
+            bytes32 payload;
+            (payload, sender, requestId) = abi.decode(message, (bytes32, address, bytes32));
+            IReceiver(receiver).receiveHashData(sender, payload, requestId);
         } else if (message_[message_.length - 1] == 0x00) {
-            (bytes memory payload, address sender) = abi.decode(message, (bytes, address));
-            IReceiver(receiver).receiveData(sender, payload);
+            bytes memory payload;
+            (payload, sender, requestId) = abi.decode(message, (bytes, address, bytes32));
+            IReceiver(receiver).receiveData(sender, payload, requestId);
         } else {
             revert("ReceiverLZ: wrong message");
         }
+        emit RequestReceived(requestId);
     }
 }

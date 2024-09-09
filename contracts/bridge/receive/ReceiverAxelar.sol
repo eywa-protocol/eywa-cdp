@@ -21,6 +21,7 @@ contract ReceiverAxelar is AxelarExpressExecutable, AccessControlEnumerable {
 
     mapping(string sourceChain => address peer) public peers;
     event PeerSet(string sourceChain, address peer);
+    event RequestReceived(bytes32 requestId);
 
     constructor(address gateway_, address gasService_, address receiver_) AxelarExpressExecutable(gateway_) {
         require(gateway_ != address(0), "ReceiverAxelar: zero address");
@@ -54,6 +55,8 @@ contract ReceiverAxelar is AxelarExpressExecutable, AccessControlEnumerable {
         bytes calldata payload_
     ) internal override {
         require(peers[sourceChain] == sourceAddress.toAddress(), "ReceiverAxelar: wrong peer");
+        bytes32 requestId;
+        address sender;
         uint256 length = payload_.length - 1;
         bytes memory data = new bytes(length);
         for (uint i; i < length; ++i) {
@@ -61,14 +64,17 @@ contract ReceiverAxelar is AxelarExpressExecutable, AccessControlEnumerable {
         }
 
         if (payload_[payload_.length - 1] == 0x01) {
-            require(data.length == 64, "ReceiverAxelar: Invalid message length");
-            (bytes32 payload, address sender) = abi.decode(data, (bytes32, address));
-            IReceiver(receiver).receiveHashData(sender, payload);
+            require(data.length == 96, "ReceiverAxelar: Invalid message length");
+            bytes32 payload;
+            (payload, sender, requestId) = abi.decode(data, (bytes32, address, bytes32));
+            IReceiver(receiver).receiveHashData(sender, payload, requestId);
         } else if (payload_[payload_.length - 1] == 0x00) {
-            (bytes memory payload, address sender) = abi.decode(data, (bytes, address));
-            IReceiver(receiver).receiveData(sender, payload);
+            bytes memory payload;
+            (payload, sender, requestId) = abi.decode(data, (bytes, address, bytes32));
+            IReceiver(receiver).receiveData(sender, payload, requestId);
         } else {
             revert("ReceiverAxelar: wrong message");
         }
+        emit RequestReceived(requestId);
     }
 }

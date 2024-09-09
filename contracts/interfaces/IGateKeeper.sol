@@ -15,8 +15,10 @@ interface IGateKeeper {
         bytes calldata data,
         address to,
         uint64 chainIdTo,
-        bytes memory options
+        bytes[] memory options
     ) external;
 
-    function treasuries(address sender) external returns (address treasury);
+    function nonces(address protocol) external view returns (uint256 nonce);
+
+    function treasuries(address protocol) external returns (address treasury);
 }

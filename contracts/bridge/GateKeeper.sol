@@ -15,6 +15,7 @@ import "../interfaces/IValidatedDataReciever.sol";
 import { INativeTreasuryFactory } from '../interfaces/INativeTreasuryFactory.sol';
 import { NativeTreasury } from '../bridge/NativeTreasury.sol';
 import { INativeTreasury } from  "../interfaces/INativeTreasury.sol";
+
 contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, ReentrancyGuard {
     using Address for address;
 
@@ -167,7 +168,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
      * 
      * @param params send params. params.data must be collectedData
      * @param nonce nonce
-     * @param sender protocol address
+     * @param protocol protocol address
      * @param bridge bridge to retry send
      * @param currentOptions options of current call. Can be differ from first call
      * @param isHash flag for choose send data or hash
@@ -175,34 +176,39 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     function retry(
         IBridge.SendParams memory params,
         uint256 nonce,
-        address sender,
+        address protocol,
         address bridge,
         bytes memory currentOptions,
         bool isHash
         ) external payable {
-        require(sentDataHash[sender][nonce] == keccak256(abi.encode(
+        require(sentDataHash[protocol][nonce] == keccak256(abi.encode(
             params,
             nonce,
-            sender
+            protocol
         )), "GateKeeper: wrong data");
 
+        bytes32 requestId = RequestIdLib.prepareRequestId(
+            castToBytes32(params.to),
+            params.chainIdTo,
+            castToBytes32(msg.sender),
+            block.chainid,
+            nonce
+        );
         if (isHash) {
-            params.data = _encodeOut(abi.encode(keccak256(params.data), sender), 0x01);
+            params.data = _encodeOut(abi.encode(keccak256(params.data), protocol, requestId), 0x01);
         } else {
-            params.data = _encodeOut(abi.encode(params.data, sender), 0x00);
+            params.data = _encodeOut(abi.encode(params.data, protocol, requestId), 0x00);
         }
 
-        uint256 gasFee = IBridge(bridge).estimateGasFee(
+        uint256 gasFee = _sendCustomBridge(
+            bridge,
             params,
-            sender,
-            currentOptions
-        );
-        IBridge(bridge).sendV3{value: gasFee}(
-            params,
-            sender,
             nonce,
+            protocol,
             currentOptions
         );
+        require(msg.value >= gasFee, "GateKeeper: not enough value");
+        payable(treasuries[protocol]).transfer(gasFee);
         if (msg.value > gasFee) {
             payable(msg.sender).transfer(msg.value - gasFee);
         }
@@ -272,41 +278,27 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     }
 
     /**
-     * @dev Sends data to a destination contract on a specified chain using the opposite BridgeV2 contract.
-     * If payToken is address(0), the payment is made in Ether, otherwise it is made using the ERC20 token 
-     * at the specified address.
-     * The payment amount is calculated based on the data length and the specified chain ID and discount rate of the protocol.
-     *
-     * Emits a PaymentReceived event after the payment has been processed.
+     * @dev Sends data to a destination contract
      *
      * @param data The data (encoded with selector) which would be send to the destination contract;
      * @param to The address of the destination contract;
      * @param chainIdTo The ID of the chain where the destination contract resides;
-     * @param options Additional options for bridges. 
-     *  Params must be sorted by priority and from las to new chain
+     * @param currentOptions Additional options for bridges. 
+     *  Params must be sorted by priority
      *  bridge_1 - bridge with priority 1, bridge_2 - brdige with priority 2
-     *  [ 
-     *   [],
-     *   ...
-     *   [bridge_1_destination, bridge_2_destination, bridge_3_destination], 
-     *   [bridge_1_hub, bridge_2_hub], 
-     *   [bridge_1_source, bridge_2_source]  
-     *  ]
+     *  [bridge_1_options, bridge_2_options, bridge_3_options]
      */
     function sendData(
         bytes calldata data,
         address to,
         uint64 chainIdTo,
-        bytes memory options
+        bytes[] memory currentOptions
     ) external nonReentrant {
         bytes memory out;
         bytes32 requestId;
         uint256 nonce;
         bytes memory collectedData;
-        bytes[] memory currentOptions;
         {
-            bytes memory nextOptions;
-            (currentOptions, nextOptions) = _popOptions(options);
             nonce = ++nonces[msg.sender];
             requestId = RequestIdLib.prepareRequestId(
                 castToBytes32(to),
@@ -315,15 +307,14 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
                 block.chainid,
                 nonce
             );
-            bytes4 selector = bytes4(data[:4]);
             bytes memory info = abi.encodeWithSelector(
                 IValidatedDataReciever.receiveValidatedData.selector,
-                selector,
+                bytes4(data[:4]),
                 msg.sender,
                 block.chainid
             );
             collectedData = abi.encode(
-                abi.encodeWithSelector(selector, data, nextOptions), 
+                data, 
                 info, 
                 nonce, 
                 to
@@ -339,16 +330,14 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
                 msg.sender
             ));
         }
-        
-        address[] memory selectedBridges = _selectBridgesByPriority(msg.sender, chainIdTo);
+        address[] memory selectedBridges = selectBridgesByPriority(msg.sender, chainIdTo);
 
         for (uint8 i; i < selectedBridges.length; ++i) {
             if (i == 0) {
-                out = _encodeOut(abi.encode(collectedData, msg.sender), 0x00); // isHash false
+                out = _encodeOut(abi.encode(collectedData, msg.sender, requestId), 0x00); // isHash false
             } else if (i == 1) {
-                out = _encodeOut(abi.encode(keccak256(collectedData), msg.sender), 0x01); // isHash true
+                out = _encodeOut(abi.encode(keccak256(collectedData), msg.sender, requestId), 0x01); // isHash true
             }
-
             _sendCustomBridge(
                 selectedBridges[i], 
                 IBridge.SendParams({
@@ -363,6 +352,25 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
             );
         }
         emit DataSent(selectedBridges, requestId, collectedData, to, chainIdTo, nonce, msg.sender);
+    }
+
+    /**
+     * @dev Select bridge by priority and by threshold
+     * 
+     * @param protocol protocol, which uses bridge
+     * @param chainIdTo chain id to send
+     */
+    function selectBridgesByPriority(address protocol, uint64 chainIdTo) public view returns(address[] memory) {
+        bytes32 key = _packKey(protocol, chainIdTo);
+        uint8 threshold_ = threshold[key];
+        require(threshold_ > 0, "GateKeeper: zero threshold");
+        address[] memory selectedBridges = new address[](threshold_);
+        for (uint8 i; i < threshold_; ++i) {
+            address currentBridge = bridges[key][i];
+            require(registeredBridges[currentBridge], "GateKeeper: bridge not registered");
+            selectedBridges[i] = currentBridge;
+        }
+        return selectedBridges;
     }
 
     /**
@@ -398,25 +406,6 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     }
 
     /**
-     * @dev Select bridge by priority and by threshold
-     * 
-     * @param protocol threshold for current protocol and chainIdTo
-     * @param chainIdTo chain id to send
-     */
-    function _selectBridgesByPriority(address protocol, uint64 chainIdTo) private view returns(address[] memory) {
-        bytes32 key = _packKey(protocol, chainIdTo);
-        uint8 threshold_ = threshold[key];
-        require(threshold_ > 0, "GateKeeper: zero threshold");
-        address[] memory selectedBridges = new address[](threshold_);
-        for (uint8 i; i < threshold_; ++i) {
-            address currentBridge = bridges[key][i];
-            require(registeredBridges[currentBridge], "GateKeeper: bridge not registered");
-            selectedBridges[i] = currentBridge;
-        }
-        return selectedBridges;
-    }
-
-    /**
      * @dev Send data by custom bridge
      * 
      * @param bridge bridge address
@@ -438,14 +427,15 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
             options
         );
         uint256 additionalFee = calculateAdditionalFee(params.data.length, uint64(params.chainIdTo), bridge, protocol);
-        INativeTreasury(treasuries[protocol]).getValue(gasFee + additionalFee);
+        uint256 totalFee = gasFee + additionalFee;
+        INativeTreasury(treasuries[protocol]).getValue(totalFee);
         IBridge(bridge).sendV3{value: gasFee}(
             params,
             protocol,
             nonce,
             options
         );
-        return gasFee;
+        return totalFee;
     }
 
     /**
