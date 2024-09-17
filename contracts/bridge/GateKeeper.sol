@@ -211,9 +211,11 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
             discounts[address(0)]
         );
         require(msg.value >= gasFee, "GateKeeper: not enough value");
-        payable(treasuries[protocol]).transfer(gasFee);
+        (bool success, ) = treasuries[protocol].call{value: gasFee}("");
+        require(success, "GateKeeper: failed to send Ether");
         if (msg.value > gasFee) {
-            payable(msg.sender).transfer(msg.value - gasFee);
+            (success, ) = msg.sender.call{value: msg.value - gasFee}("");
+            require(success, "GateKeeper: failed to send Ether");
         }
         emit RetrySent(bridge, params, nonce, msg.sender);
     }
