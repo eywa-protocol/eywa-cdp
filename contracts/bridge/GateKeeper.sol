@@ -370,6 +370,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         bytes32 key = _packKey(protocol, chainIdTo);
         uint8 threshold_ = threshold[key];
         require(threshold_ > 0, "GateKeeper: zero threshold");
+        require(threshold_ <= bridges[key].length, "GateKeeper: not enough bridges");
         address[] memory selectedBridges = new address[](threshold_);
         for (uint8 i; i < threshold_; ++i) {
             address currentBridge = bridges[key][i];
