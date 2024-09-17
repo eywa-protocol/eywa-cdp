@@ -181,7 +181,8 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         address bridge,
         bytes memory currentOptions,
         bool isHash
-        ) external payable {
+    ) external payable {
+        require(registeredBridges[bridge], "GateKeeper: wrong bridge");
         require(sentDataHash[protocol][nonce] == keccak256(abi.encode(
             params,
             nonce,
