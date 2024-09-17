@@ -191,7 +191,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         bytes32 requestId = RequestIdLib.prepareRequestId(
             castToBytes32(params.to),
             params.chainIdTo,
-            castToBytes32(msg.sender),
+            castToBytes32(protocol),
             block.chainid,
             nonce
         );
