@@ -147,20 +147,20 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
      *
      * @param dataLength The length of the data being transmitted in the cross-chain operation;
      * @param chainIdTo The ID of the destination chain;
-     * @param protocol The address of the protocol requesting the cross-chain operation;
+     * @param discountPersentage The discount for protocol;
      * @return amountToPay The fee amount to be paid for the cross-chain operation.
      */
     function calculateAdditionalFee(
         uint256 dataLength,
         uint64 chainIdTo,
         address bridge,
-        address protocol
+        uint256 discountPersentage
     ) public view returns (uint256 amountToPay) {
         uint256 baseFee = baseFees[chainIdTo][bridge];
         uint256 rate = rates[chainIdTo][bridge];
         require(baseFee != 0, "GateKeeper: base fee not set");
         require(rate != 0, "GateKeeper: rate not set");
-        (amountToPay) = _getPercentValues(baseFee + (dataLength * rate), discounts[protocol]);
+        (amountToPay) = _getPercentValues(baseFee + (dataLength * rate), discountPersentage);
     }
 
     /**
@@ -205,7 +205,8 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
             params,
             nonce,
             protocol,
-            currentOptions
+            currentOptions,
+            discounts[address(0)]
         );
         require(msg.value >= gasFee, "GateKeeper: not enough value");
         payable(treasuries[protocol]).transfer(gasFee);
@@ -348,7 +349,8 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
                 }), 
                 nonce,
                 msg.sender,
-                currentOptions[i]
+                currentOptions[i],
+                discounts[msg.sender]
             );
         }
         emit DataSent(selectedBridges, requestId, collectedData, to, chainIdTo, nonce, msg.sender);
@@ -419,14 +421,15 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         IBridge.SendParams memory params,
         uint256 nonce,
         address protocol,
-        bytes memory options
+        bytes memory options,
+        uint256 discountPersentage
     ) internal returns(uint256) {
         uint256 gasFee = IBridge(bridge).estimateGasFee(
             params,
             protocol,
             options
         );
-        uint256 additionalFee = calculateAdditionalFee(params.data.length, uint64(params.chainIdTo), bridge, protocol);
+        uint256 additionalFee = calculateAdditionalFee(params.data.length, uint64(params.chainIdTo), bridge, discountPersentage);
         uint256 totalFee = gasFee + additionalFee;
         INativeTreasury(treasuries[protocol]).getValue(totalFee);
         IBridge(bridge).sendV3{value: gasFee}(

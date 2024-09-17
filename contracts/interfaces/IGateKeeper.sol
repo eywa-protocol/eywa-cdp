@@ -8,7 +8,7 @@ interface IGateKeeper {
         uint256 dataLength,
         uint64 chainIdTo,
         address bridge,
-        address sender
+        uint256 discountPersentage
     ) external view returns (uint256 amountToPay);
 
     function sendData(
