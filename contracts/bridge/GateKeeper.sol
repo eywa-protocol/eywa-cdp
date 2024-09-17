@@ -39,6 +39,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
 
     /// @dev operator role id
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
+    bytes32 public constant TREASURY_ADMIN_ROLE = keccak256("TREASURY_ADMIN_ROLE");
     /// @dev chainId => bridge => base fees
     mapping(uint64 => mapping(address => uint256)) public baseFees;
     /// @dev chainId => pay token => rate (per byte)
@@ -110,7 +111,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
      * @param treasuryAdmin_ admin of treasury, which can withdraw
      * @param protocol_ Protocol address who will use treasury
      */
-    function registerProtocol(address treasuryAdmin_, address protocol_) external {
+    function registerProtocol(address treasuryAdmin_, address protocol_) external onlyRole(TREASURY_ADMIN_ROLE) {
         require(treasuries[protocol_] == address(0), "GateKeeper: protocol registered");
         address treasury = address(new NativeTreasury(treasuryAdmin_));
         treasuries[protocol_] = treasury;
