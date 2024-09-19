@@ -17,7 +17,6 @@ contract ReceiverLZ is OAppReceiver, AccessControlEnumerable {
     /// @dev address of main receiver, that stores data and hashes
     address public immutable receiver;
 
-    event RequestReceived(bytes32 requestId, bytes1 isHash);
 
     constructor(address endpoint_,  address receiver_) OAppCore(endpoint_, msg.sender) {
         require(endpoint_ != address(0), "ReceiverLZ: zero address");
@@ -68,13 +67,11 @@ contract ReceiverLZ is OAppReceiver, AccessControlEnumerable {
             require(message.length == 96, "ReceiverLZ: Invalid message length");
             bytes32 payload;
             (payload, sender, requestId) = abi.decode(message, (bytes32, address, bytes32));
-            IReceiver(receiver).receiveHashData(sender, payload, requestId);
-            emit RequestReceived(requestId, 0x01);
+            IReceiver(receiver).receiveHash(sender, payload, requestId);
         } else if (message_[message_.length - 1] == 0x00) {
             bytes memory payload;
             (payload, sender, requestId) = abi.decode(message, (bytes, address, bytes32));
             IReceiver(receiver).receiveData(sender, payload, requestId);
-            emit RequestReceived(requestId, 0x00);
         } else {
             revert("ReceiverLZ: wrong message");
         }
