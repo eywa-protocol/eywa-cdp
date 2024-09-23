@@ -40,6 +40,9 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     /// @dev operator role id
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
     bytes32 public constant TREASURY_ADMIN_ROLE = keccak256("TREASURY_ADMIN_ROLE");
+
+    /// @dev receiver conract
+    address public receiver;
     /// @dev chainId => bridge => base fees
     mapping(uint64 => mapping(address => uint256)) public baseFees;
     /// @dev chainId => pay token => rate (per byte)
@@ -59,8 +62,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     /// @dev msg.sender -> nonce -> hash of data
     mapping(address => mapping(uint256 => bytes32)) public sentDataHash;
 
-    event CrossChainCallPaid(address indexed sender, address indexed token, uint256 transactionCost);
-    event BridgeSet(address bridge);
+    event ReceiverSet(address receiver);
     event BaseFeeSet(uint64 chainId, address bridge, uint256 fee);
     event RateSet(uint64 chainId, address bridge, uint256 rate);
     event DiscountSet(address protocol, uint256 discount);
@@ -84,9 +86,10 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         address sender
     );
 
-    constructor() {
+    constructor(address receiver_) {
+        require(receiver_ != address(0), "GateKeeper: zero address");
+        receiver = receiver_;
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
-
     }
 
     receive() external payable { }
@@ -104,6 +107,20 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
             emit BaseFeeSet(baseFee.chainId, baseFee.bridge, baseFee.fee);
         }
     }
+
+    /**
+     * @notice Sets the address of the Receiver contract.
+     *
+     * @dev Only the contract admin is allowed to call this function.
+     *
+     * @param receiver_ the address of the new Receiver contract to be set.
+     */
+    function setReceiver(address receiver_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(receiver_ != address(0), "GateKeeper: zero address");
+        receiver = receiver_;
+        emit ReceiverSet(receiver_);
+    }
+
 
     /**
      * @dev Register protocol, deploy trasury for it
@@ -378,6 +395,14 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
             selectedBridges[i] = currentBridge;
         }
         return selectedBridges;
+    }
+
+    /**
+     * @dev Returns the address of the part of the bridge that delivers to the destination chain.
+     * In this case this is receiver contract
+     */
+    function bridge() external view returns(address) {
+        return receiver;
     }
 
     /**
