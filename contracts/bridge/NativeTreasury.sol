@@ -25,19 +25,8 @@ contract NativeTreasury is INativeTreasury, Ownable2Step {
      * @param value_ value to transfer
      */
     function getValue(uint256 value_) external {
-        require(gateKeeper == msg.sender, "NativeTreasury: only gateKeeper");
+        require(msg.sender == gateKeeper || msg.sender == owner(), "NativeTreasury: only admin or gatekeeper");
         payable(msg.sender).transfer(value_);
         emit ValueSent(value_, msg.sender);
     }
-
-    /**
-     * @dev Withdraw value
-     *
-     * @param value_ value to withdraw
-     */
-    function withdrawValue(uint256 value_) external onlyOwner {
-        payable(msg.sender).transfer(value_);
-        emit ValueSent(value_, msg.sender);
-    }
-
 }
