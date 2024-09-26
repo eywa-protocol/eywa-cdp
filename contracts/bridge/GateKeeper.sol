@@ -472,25 +472,6 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     }
 
     /**
-     * @dev divides options for current and encodes next.
-     * 
-     * @param options_ options
-     * @return current options
-     * @return encoded next options
-     */
-    function _popOptions(bytes memory options_) internal pure returns (bytes[] memory, bytes memory) {
-        bytes[][] memory options = abi.decode(options_,  (bytes[][]));
-        bytes[] memory currentOptions = options[options.length - 1];
-
-        bytes[][] memory nextOptions = new bytes[][](options.length - 1);
-        
-        for (uint8 i; i < options.length - 1; i++) {
-            nextOptions[i] = options[i];
-        }
-        return (currentOptions, abi.encode(nextOptions));
-    }
-
-    /**
      * @dev Pack address and uint64 to bytes32 as a key
      * 
      * @param addr  address
