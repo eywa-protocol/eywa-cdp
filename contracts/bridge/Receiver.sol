@@ -156,6 +156,9 @@ contract Receiver is IReceiver, AccessControlEnumerable {
     ) internal returns(bool) {
         require(executedData[hashKey] == false, "Receiver: already executed");
         if (currentThreshold >= targetThreshold) {
+            if (receivedData.length == 0) {
+                return false;
+            }
             executedData[hashKey] = true;
             (
                 bytes memory data,
