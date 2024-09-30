@@ -51,12 +51,12 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     mapping(address => uint256) public discounts;
     /// @dev nonce for senders
     mapping(address => uint256) public nonces;
-    // @dev brdige => is registered
+    // @dev bridge => is registered
     mapping(address => bool) public registeredBridges;  
     // @dev protocol => treasury
     mapping(address => address) public treasuries; 
     // @dev array of sorted by priorities bridges. Bytes32 = protocol address + chainIdTo
-    mapping(bytes32 => address[]) public bridges;
+    mapping(bytes32 => address[]) public bridgesByPriority;
     /// @dev protocol -> threshold
     mapping(bytes32 => uint8) public threshold;
     /// @dev msg.sender -> nonce -> hash of data
@@ -199,13 +199,20 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         bytes memory currentOptions,
         bool isHash
     ) external payable {
-        require(registeredBridges[bridge], "GateKeeper: wrong bridge");
+        require(registeredBridges[bridge], "GateKeeper: bridge not registered");
         require(sentDataHash[protocol][nonce] == keccak256(abi.encode(
             params,
             nonce,
             protocol
         )), "GateKeeper: wrong data");
-
+        bool isBridgeFound;
+        address[] memory protocolBridges = bridgesByPriority[_packKey(protocol, uint64(params.chainIdTo))];
+        for (uint256 i; i < protocolBridges.length; ++i) {
+            if (protocolBridges[i] == bridge) {
+                isBridgeFound = true;
+            }
+        }
+        require (isBridgeFound, "GateKeeper: wrong bridge");
         bytes32 requestId = RequestIdLib.prepareRequestId(
             castToBytes32(params.to),
             params.chainIdTo,
@@ -294,7 +301,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         uint256 length = chainIds_.length;
         require(length == bridges_.length, "GateKeeper: wrong lengths");
         for (uint256 i; i < length; ++i) {
-            bridges[_packKey(protocol_, chainIds_[i])] = bridges_[i];
+            bridgesByPriority[_packKey(protocol_, chainIds_[i])] = bridges_[i];
         }
         emit BridgesPriorityUpdated(protocol_, chainIds_, bridges_);
     }
@@ -307,7 +314,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
      * @param chainIdTo The ID of the chain where the destination contract resides;
      * @param currentOptions Additional options for bridges. 
      *  Params must be sorted by priority
-     *  bridge_1 - bridge with priority 1, bridge_2 - brdige with priority 2
+     *  bridge_1 - bridge with priority 1, bridge_2 - bridge with priority 2
      *  [bridge_1_options, bridge_2_options, bridge_3_options]
      */
     function sendData(
@@ -387,10 +394,10 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         bytes32 key = _packKey(protocol, chainIdTo);
         uint8 threshold_ = threshold[key];
         require(threshold_ > 0, "GateKeeper: zero threshold");
-        require(threshold_ <= bridges[key].length, "GateKeeper: not enough bridges");
+        require(threshold_ <= bridgesByPriority[key].length, "GateKeeper: not enough bridges");
         address[] memory selectedBridges = new address[](threshold_);
         for (uint8 i; i < threshold_; ++i) {
-            address currentBridge = bridges[key][i];
+            address currentBridge = bridgesByPriority[key][i];
             require(registeredBridges[currentBridge], "GateKeeper: bridge not registered");
             selectedBridges[i] = currentBridge;
         }
