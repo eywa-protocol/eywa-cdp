@@ -28,7 +28,7 @@ contract Receiver is IReceiver, AccessControlEnumerable {
     /// @dev receivers count
     uint8 public receiversCount;
 
-    event ThresholdSet(address sender, uint8 threshold);
+    event ThresholdSet(address[] sender, uint8[] threshold);
     event ReceiverCountSet(uint8 receiverCount);
     event RequestExecuted(bytes32 requestId);
     event Received(bytes32 requestId, bool isHash);
@@ -39,15 +39,19 @@ contract Receiver is IReceiver, AccessControlEnumerable {
     }
 
     /**
-     * @notice Sets sender's threshold. Must be the same on the sender's side.
+     * @notice Sets multiple sender's threshold. Must be the same on the sender's side.
      *
-     * @param sender The protocol contract address;
-     * @param threshold_ The threshold for the given contract address.
+     * @param sender The protocol contract addresses;
+     * @param threshold_ The thresholds for the given contract addresses.
      */
-    function setThreshold(address sender, uint8 threshold_) external onlyRole(OPERATOR_ROLE) {
-        require(threshold_ >= 1, "Receiver: wrong threshold");
-        require(threshold_ <= receiversCount, "Receiver: wrong threshold");
-        threshold[sender] = threshold_;
+    function setThreshold(address[] memory sender, uint8[] memory threshold_) external onlyRole(OPERATOR_ROLE) {
+        uint8 length = uint8(sender.length);
+        require(length == threshold_.length, "Receiver: wrong count");
+        for (uint8 i; i < length; ++i) {
+            require(threshold_[i] >= 1, "Receiver: wrong threshold");
+            require(threshold_[i] <= receiversCount, "Receiver: wrong threshold");
+            threshold[sender[i]] = threshold_[i];
+        }
         emit  ThresholdSet(sender, threshold_);
     }
 
