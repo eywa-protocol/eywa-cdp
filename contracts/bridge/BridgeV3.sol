@@ -45,7 +45,7 @@ contract BridgeV3 is IBridgeV3, AccessControlEnumerable, Typecast, ReentrancyGua
     event RequestSent(
         bytes32 requestId,
         bytes data,
-        address to,
+        bytes32 to,
         uint64 chainIdTo
     );
 
@@ -178,8 +178,10 @@ contract BridgeV3 is IBridgeV3, AccessControlEnumerable, Typecast, ReentrancyGua
             bytes memory payload = Merkle.prove(params[i].merkleProof, Block.txRootHash(params[i].blockHeader));
 
             // get call data
-            (bytes32 requestId, bytes memory receivedData, address to, uint64 chainIdTo) = Block.decodeRequest(payload);
+            (bytes32 requestId, bytes memory receivedData, bytes32 to_, uint64 chainIdTo) = Block.decodeRequest(payload);
             require(chainIdTo == block.chainid, "Bridge: wrong chain id");
+
+            address to = address(uint160(uint256(to_)));
 
             require(to.isContract(), "Bridge: receiver is not a contract");
 

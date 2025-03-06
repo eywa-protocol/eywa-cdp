@@ -17,7 +17,7 @@ interface IBridge {
         /// @param data call data
         bytes data;
         /// @param to receiver contract address
-        address to;
+        bytes32 to;
         /// @param chainIdTo destination chain ID
         uint256 chainIdTo;
     }
