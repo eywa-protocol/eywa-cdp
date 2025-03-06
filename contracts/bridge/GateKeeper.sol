@@ -74,7 +74,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         address[] selectedBridges, 
         bytes32 requestId, 
         bytes collectedData, 
-        address to, 
+        bytes32 to, 
         uint64 chainIdTo, 
         uint256 nonce, 
         address sender
@@ -214,7 +214,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         }
         require (isBridgeFound, "GateKeeper: wrong bridge");
         bytes32 requestId = RequestIdLib.prepareRequestId(
-            castToBytes32(params.to),
+            params.to,
             params.chainIdTo,
             castToBytes32(protocol),
             block.chainid,
@@ -319,7 +319,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
      */
     function sendData(
         bytes calldata data,
-        address to,
+        bytes32 to,
         uint64 chainIdTo,
         bytes[] memory currentOptions
     ) external nonReentrant {
@@ -330,7 +330,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         {
             nonce = ++nonces[msg.sender];
             requestId = RequestIdLib.prepareRequestId(
-                castToBytes32(to),
+                to,
                 chainIdTo,
                 castToBytes32(msg.sender),
                 block.chainid,
