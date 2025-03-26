@@ -13,10 +13,18 @@ interface IGateKeeper {
 
     function sendData(
         bytes calldata data,
-        address to,
+        bytes32 to,
         uint64 chainIdTo,
         bytes[] memory options
-    ) external;
+    ) external payable;
+
+
+    function estimateGasFee(
+        bytes calldata data,
+        bytes32 to,
+        uint64 chainIdTo,
+        bytes[] memory options
+    ) external view returns(uint256);
 
     function nonces(address protocol) external view returns (uint256 nonce);
 

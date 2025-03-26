@@ -168,8 +168,9 @@ contract Receiver is IReceiver, AccessControlEnumerable {
                 bytes memory data,
                 bytes memory check,
                 uint256 nonce,
-                address executor
-            ) = abi.decode(receivedData, (bytes, bytes, uint256, address));
+                bytes32 executor_
+            ) = abi.decode(receivedData, (bytes, bytes, uint256, bytes32));
+            address executor = address(uint160(uint256(executor_)));
             bytes memory result = executor.functionCall(check);
             require(abi.decode(result, (bool)), "Receiver: check failed");
             executor.functionCall(data, "Receiver: receive failed");

@@ -322,32 +322,14 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         bytes32 to,
         uint64 chainIdTo,
         bytes[] memory currentOptions
-    ) external nonReentrant {
+    ) external payable nonReentrant {
         bytes memory out;
         bytes32 requestId;
         uint256 nonce;
         bytes memory collectedData;
         {
             nonce = ++nonces[msg.sender];
-            requestId = RequestIdLib.prepareRequestId(
-                to,
-                chainIdTo,
-                castToBytes32(msg.sender),
-                block.chainid,
-                nonce
-            );
-            bytes memory info = abi.encodeWithSelector(
-                IValidatedDataReciever.receiveValidatedData.selector,
-                bytes4(data[:4]),
-                msg.sender,
-                block.chainid
-            );
-            collectedData = abi.encode(
-                data, 
-                info, 
-                nonce, 
-                to
-            );
+            (requestId, nonce, collectedData) = _buildData(to, chainIdTo, data);
             sentDataHash[msg.sender][nonce] = keccak256(abi.encode(
                 IBridge.SendParams({
                         requestId: requestId,
@@ -361,13 +343,14 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         }
         address[] memory selectedBridges = selectBridgesByPriority(msg.sender, chainIdTo);
 
+        uint256 totalFee;
         for (uint8 i; i < selectedBridges.length; ++i) {
             if (i == 0) {
                 out = _encodeOut(abi.encode(collectedData, msg.sender, requestId), 0x00); // isHash false
             } else if (i == 1) {
                 out = _encodeOut(abi.encode(keccak256(collectedData), msg.sender, requestId), 0x01); // isHash true
             }
-            _sendCustomBridge(
+            totalFee += _sendCustomBridge(
                 selectedBridges[i], 
                 IBridge.SendParams({
                         requestId: requestId,
@@ -381,6 +364,8 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
                 discounts[msg.sender]
             );
         }
+        // TODO think about fee. Should fee return extra fee or not?
+        require(msg.value >= totalFee, "GateKeeper: not enough value");
         emit DataSent(selectedBridges, requestId, collectedData, to, chainIdTo, nonce, msg.sender);
     }
 
@@ -409,7 +394,74 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
      * In this case this is receiver contract
      */
     function bridge() external view returns(address) {
+        // TODO change in router from onlyBridge(gateKeeper.bridge() to gateKeeper.receiver())
         return receiver;
+    }
+
+    function estimateGasFee(
+        bytes calldata data,
+        bytes32 to,
+        uint64 chainIdTo,
+        bytes[] memory currentOptions
+    ) public view returns (uint256) {
+
+        bytes32 requestId;
+        uint256 nonce;
+        bytes memory collectedData;
+        (requestId, nonce, collectedData) = _buildData(to, chainIdTo, data);
+
+        address[] memory selectedBridges = selectBridgesByPriority(msg.sender, uint64(chainIdTo));
+        bytes memory out;
+        uint256 totalFee;
+        for (uint8 i; i < selectedBridges.length; ++i) {
+            if (i == 0) {
+                out = _encodeOut(abi.encode(collectedData, msg.sender, requestId), 0x00); // isHash false
+            } else if (i == 1) {
+                out = _encodeOut(abi.encode(keccak256(collectedData), msg.sender, requestId), 0x01); // isHash true
+            }
+            totalFee += _quoteCustomBridge(
+                selectedBridges[i], 
+                IBridge.SendParams({
+                        requestId: requestId,
+                        data: out,
+                        to: to,
+                        chainIdTo: chainIdTo
+                }), 
+                msg.sender,
+                currentOptions[i],
+                discounts[msg.sender]
+            );
+        }
+        return totalFee;
+    }
+
+    function _buildData(bytes32 to, uint64 chainIdTo, bytes calldata data) internal view returns(bytes32, uint256, bytes memory) {
+        bytes32 requestId;
+        uint256 nonce;
+        bytes memory collectedData;
+        {
+            nonce = nonces[msg.sender] + 1;
+            requestId = RequestIdLib.prepareRequestId(
+                to,
+                chainIdTo,
+                castToBytes32(msg.sender),
+                block.chainid,
+                nonce
+            );
+            bytes memory info = abi.encodeWithSelector(
+                IValidatedDataReciever.receiveValidatedData.selector,
+                bytes4(data[:4]),
+                msg.sender,
+                block.chainid
+            );
+            collectedData = abi.encode(
+                data, 
+                info, 
+                nonce, 
+                to
+            );
+        }
+        return (requestId, nonce, collectedData);
     }
 
     /**
@@ -447,35 +499,72 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     /**
      * @dev Send data by custom bridge
      * 
-     * @param bridge bridge address
+     * @param bridge_ bridge address
      * @param params params to send
      * @param nonce nonce 
      * @param protocol protocol address
      * @param options  additional options for bridge call
      */
     function _sendCustomBridge(
-        address bridge,
+        address bridge_,
         IBridge.SendParams memory params,
         uint256 nonce,
         address protocol,
         bytes memory options,
         uint256 discountPersentage
     ) internal returns(uint256) {
-        uint256 gasFee = IBridge(bridge).estimateGasFee(
+        uint256 gasFee;
+        uint256 totalFee;
+        (gasFee, totalFee) = _calculateGasFee(
+            bridge_,
             params,
             protocol,
-            options
+            options,
+            discountPersentage
         );
-        uint256 additionalFee = calculateAdditionalFee(params.data.length, uint64(params.chainIdTo), bridge, discountPersentage);
-        uint256 totalFee = gasFee + additionalFee;
-        INativeTreasury(treasuries[protocol]).getValue(totalFee);
-        IBridge(bridge).sendV3{value: gasFee}(
+
+        IBridge(bridge_).sendV3{value: gasFee}(
             params,
             protocol,
             nonce,
             options
         );
         return totalFee;
+    }
+
+    function _quoteCustomBridge(
+        address bridge_,
+        IBridge.SendParams memory params,
+        address protocol,
+        bytes memory options,
+        uint256 discountPersentage
+    ) internal view returns (uint256) {
+        uint256 totalFee;
+        (, totalFee) = _calculateGasFee(
+            bridge_,
+            params,
+            protocol,
+            options,
+            discountPersentage
+        );
+        return totalFee;
+    }
+
+    function _calculateGasFee(
+        address bridge_,
+        IBridge.SendParams memory params,
+        address protocol,
+        bytes memory options,
+        uint256 discountPersentage
+    ) internal view returns(uint256, uint256) {
+        uint256 gasFee = IBridge(bridge_).estimateGasFee(
+            params,
+            protocol,
+            options
+        );
+        uint256 additionalFee = calculateAdditionalFee(params.data.length, uint64(params.chainIdTo), bridge_, discountPersentage);
+        uint256 totalFee = gasFee + additionalFee;
+        return (totalFee, gasFee);
     }
 
     /**

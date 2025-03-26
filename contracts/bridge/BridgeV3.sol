@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "../interfaces/IBridgeV3.sol";
+import "../interfaces/IOracle.sol";
 import "../interfaces/IReceiver.sol";
 import "../interfaces/IGateKeeper.sol";
 import "../utils/Block.sol";
@@ -28,6 +29,7 @@ contract BridgeV3 is IBridgeV3, AccessControlEnumerable, Typecast, ReentrancyGua
     mapping(address => uint256) public nonces;
     /// @dev receiver that store thresholds
     address public receiver;
+    address public priceOracle;
     /// @dev human readable version
     string public version;
     /// @dev current state Active\Inactive
@@ -45,13 +47,22 @@ contract BridgeV3 is IBridgeV3, AccessControlEnumerable, Typecast, ReentrancyGua
     event RequestSent(
         bytes32 requestId,
         bytes data,
+        address to,
+        uint64 chainIdTo
+    );
+
+    event RequestSentV2(
+        bytes32 requestId,
+        bytes data,
         bytes32 to,
         uint64 chainIdTo
     );
 
     event StateSet(State state);
     event ReceiverSet(address receiver);
-    event ValueWithdrawn(address receiver, uint256 amount);
+    event PriceOracleSet(address priceOracle);
+    event ValueWithdrawn(address to, uint256 amount);
+    event GasPaid(bytes32 requestId, uint32 gasAmount);
 
     constructor() {
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
@@ -131,12 +142,15 @@ contract BridgeV3 is IBridgeV3, AccessControlEnumerable, Typecast, ReentrancyGua
         require(nonce > nonces[sender], "Bridge: wrong nonce");
         nonces[sender] = nonce;
 
+        address to = address(uint160(uint256(params.to)));
+
         emit RequestSent(
             params.requestId,
             params.data,
-            params.to,
-            uint64(params.chainIdTo)
+            to,
+            params.chainIdTo
         );
+        emit GasPaid(params.requestId, abi.decode(options, (uint32)));
     }
 
     function estimateGasFee(
@@ -144,7 +158,12 @@ contract BridgeV3 is IBridgeV3, AccessControlEnumerable, Typecast, ReentrancyGua
         address sender,
         bytes memory options
     ) public view returns (uint256) {
-        return 0;
+        
+        uint32 gas = abi.decode(options, (uint32));
+        (uint256 gasPrice, uint256 priceRatio, uint256 gasPerByte) = IOracle(priceOracle).getPrice(params.chainIdTo);
+        
+        return gas * gasPrice * priceRatio;
+        
     }
 
     function withdrawValue(uint256 value_) external onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -158,6 +177,9 @@ contract BridgeV3 is IBridgeV3, AccessControlEnumerable, Typecast, ReentrancyGua
      * @param params array with ReceiveParams structs.
      */
     function receiveV3(ReceiveParams[] calldata params) external override onlyRole(VALIDATOR_ROLE) nonReentrant returns (bool) {
+        
+        // TODO add paid gas
+        
         require(state != State.Inactive, "Bridge: state inactive");
 
         for (uint256 i = 0; i < params.length; ++i) {
@@ -178,10 +200,8 @@ contract BridgeV3 is IBridgeV3, AccessControlEnumerable, Typecast, ReentrancyGua
             bytes memory payload = Merkle.prove(params[i].merkleProof, Block.txRootHash(params[i].blockHeader));
 
             // get call data
-            (bytes32 requestId, bytes memory receivedData, bytes32 to_, uint64 chainIdTo) = Block.decodeRequest(payload);
+            (bytes32 requestId, bytes memory receivedData, address to, uint64 chainIdTo) = Block.decodeRequest(payload);
             require(chainIdTo == block.chainid, "Bridge: wrong chain id");
-
-            address to = address(uint160(uint256(to_)));
 
             require(to.isContract(), "Bridge: receiver is not a contract");
 
@@ -240,6 +260,12 @@ contract BridgeV3 is IBridgeV3, AccessControlEnumerable, Typecast, ReentrancyGua
         require(receiver_ != address(0), "BridgeV2: zero address");
         receiver = receiver_;
         emit ReceiverSet(receiver_);
+    }
+
+    function setPriceOracle(address priceOracle_) external onlyRole(OPERATOR_ROLE) {
+        require(priceOracle_ != address(0), "BridgeV2: zero address");
+        priceOracle = priceOracle_;
+        emit PriceOracleSet(priceOracle_);
     }
 
     /**

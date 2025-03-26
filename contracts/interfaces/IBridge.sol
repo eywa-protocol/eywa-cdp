@@ -19,7 +19,7 @@ interface IBridge {
         /// @param to receiver contract address
         bytes32 to;
         /// @param chainIdTo destination chain ID
-        uint256 chainIdTo;
+        uint64 chainIdTo;
     }
 
     function sendV3(
@@ -33,5 +33,5 @@ interface IBridge {
         SendParams memory  params,
         address sender,
         bytes memory options
-    ) external returns (uint256);
+    ) external view returns (uint256);
 }
