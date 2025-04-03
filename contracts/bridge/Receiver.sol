@@ -31,7 +31,7 @@ contract Receiver is IReceiver, AccessControlEnumerable {
     event ThresholdSet(address[] sender, uint8[] threshold);
     event ReceiverCountSet(uint8 receiverCount);
     event RequestExecuted(bytes32 requestId);
-    event Received(bytes32 requestId, bool isHash);
+    event Received(address receiver, bytes32 requestId, bool isHash);
 
     constructor() {
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
@@ -78,12 +78,12 @@ contract Receiver is IReceiver, AccessControlEnumerable {
         bytes32 hashKey = _generateHashKey(keccak256(receivedData), sender, requestId);
         if(_hashReceivers[hashKey].contains(msg.sender)) {
             if(_execute(_hashReceivers[hashKey].length(), threshold_, receivedData, hashKey, requestId)){
-                emit Received(requestId, false);
+                emit Received(msg.sender, requestId, false);
                 return;
             }
         } else {
             if(_execute(_hashReceivers[hashKey].length() + 1, threshold_, receivedData, hashKey, requestId)){
-                emit Received(requestId, false);
+                emit Received(msg.sender, requestId, false);
                 return;
             }
             _hashReceivers[hashKey].add(msg.sender);
@@ -94,7 +94,7 @@ contract Receiver is IReceiver, AccessControlEnumerable {
         } else {
             revert("Receiver: already received");
         }
-        emit Received(requestId, false);
+        emit Received(msg.sender, requestId, false);
     }
 
     /**
@@ -119,7 +119,7 @@ contract Receiver is IReceiver, AccessControlEnumerable {
         ) {
             _hashReceivers[hashKey].add(msg.sender);
         }
-        emit Received(requestId, true);
+        emit Received(msg.sender, requestId, true);
     }
 
     /**

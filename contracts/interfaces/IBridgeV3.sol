@@ -19,6 +19,12 @@ interface IBridgeV3 is IBridge {
         uint256 votersMask;
     }
 
+    enum ChainType {
+        DEFAULT,
+        ARBITRUM,
+        OPTIMISM
+    }
+
     function receiveV3(ReceiveParams[] calldata params) external returns (bool);
 
     function nonces(address sender) external returns(uint256);

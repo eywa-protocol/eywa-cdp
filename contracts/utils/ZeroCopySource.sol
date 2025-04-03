@@ -111,14 +111,27 @@ library ZeroCopySource {
      *  @return              The read uint64 value and updated offset
      */
     function NextUint64(bytes memory buff, uint256 offset) internal pure returns (uint64, uint256) {
-        require(offset + 8 <= buff.length, "NextUint64, offset exceeds maximum");
+        require(offset + 8 <= buff.length && offset < offset + 8, "NextUint64, offset exceeds maximum");
         uint64 v;
         assembly {
-            let bvalue := mload(add(add(buff, 0x20), offset))
-            v := shr(192, bvalue)  // 256 - 64 = 192
+            let tmpbytes := mload(0x40)
+            let byteLen := 0x08
+            for {
+                let tindex := 0x00
+                let bindex := sub(byteLen, 0x01)
+                let bvalue := mload(add(add(buff, 0x20), offset))
+            } lt(tindex, byteLen) {
+                tindex := add(tindex, 0x01)
+                bindex := sub(bindex, 0x01)
+            } {
+                mstore8(add(tmpbytes, tindex), byte(bindex, bvalue))
+            }
+            mstore(0x40, add(tmpbytes, byteLen))
+            v := mload(sub(tmpbytes, sub(0x20, byteLen)))
         }
         return (v, offset + 8);
     }
+
 
     /* @notice              Read next 32 bytes as uint256 type starting from offset,
                             there are limits considering the numerical limits in multi-chain

@@ -2,12 +2,12 @@
 // Copyright (c) Eywa.Fi, 2021-2023 - all rights reserved
 pragma solidity ^0.8.20;
 
-import { Ownable2Step } from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
 import "../interfaces/INativeTreasury.sol";
 import "../interfaces/IGateKeeper.sol";
 
-contract NativeTreasury is INativeTreasury, Ownable2Step {
+contract NativeTreasury is INativeTreasury, Ownable {
     address public gateKeeper;
     event ValueSent(uint256 value, address to);
 

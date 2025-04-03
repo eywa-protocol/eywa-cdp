@@ -16,6 +16,7 @@ import { INativeTreasuryFactory } from '../interfaces/INativeTreasuryFactory.sol
 import { NativeTreasury } from '../bridge/NativeTreasury.sol';
 import { INativeTreasury } from  "../interfaces/INativeTreasury.sol";
 
+
 contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, ReentrancyGuard {
     using Address for address;
 
@@ -86,6 +87,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         address sender
     );
 
+
     constructor(address receiver_) {
         require(receiver_ != address(0), "GateKeeper: zero address");
         receiver = receiver_;
@@ -122,6 +124,8 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     }
 
 
+    // TODO think about two types of protocols. With treasury and without treasury
+    // TODO we may do it permission less. Protocl must call IGateKeeper.register protocol
     /**
      * @dev Register protocol, deploy trasury for it
      * 
@@ -322,7 +326,16 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         bytes32 to,
         uint64 chainIdTo,
         bytes[] memory currentOptions
-    ) external payable nonReentrant {
+    ) external nonReentrant {
+         _sendData(data, to, chainIdTo, currentOptions);
+    }        
+
+    function _sendData(
+        bytes calldata data,
+        bytes32 to,
+        uint64 chainIdTo,
+        bytes[] memory currentOptions
+    ) internal {
         bytes memory out;
         bytes32 requestId;
         uint256 nonce;
@@ -342,15 +355,15 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
             ));
         }
         address[] memory selectedBridges = selectBridgesByPriority(msg.sender, chainIdTo);
-
-        uint256 totalFee;
+        
+        require(selectedBridges.length > 0, "GateKeeper: zero selected bridges");
         for (uint8 i; i < selectedBridges.length; ++i) {
             if (i == 0) {
                 out = _encodeOut(abi.encode(collectedData, msg.sender, requestId), 0x00); // isHash false
             } else if (i == 1) {
                 out = _encodeOut(abi.encode(keccak256(collectedData), msg.sender, requestId), 0x01); // isHash true
             }
-            totalFee += _sendCustomBridge(
+            _sendCustomBridge(
                 selectedBridges[i], 
                 IBridge.SendParams({
                         requestId: requestId,
@@ -364,8 +377,6 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
                 discounts[msg.sender]
             );
         }
-        // TODO think about fee. Should fee return extra fee or not?
-        require(msg.value >= totalFee, "GateKeeper: not enough value");
         emit DataSent(selectedBridges, requestId, collectedData, to, chainIdTo, nonce, msg.sender);
     }
 
@@ -515,14 +526,14 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     ) internal returns(uint256) {
         uint256 gasFee;
         uint256 totalFee;
-        (gasFee, totalFee) = _calculateGasFee(
+        (totalFee, gasFee) = _calculateGasFee(
             bridge_,
             params,
             protocol,
             options,
             discountPersentage
         );
-
+        INativeTreasury(treasuries[protocol]).getValue(totalFee);
         IBridge(bridge_).sendV3{value: gasFee}(
             params,
             protocol,
@@ -539,8 +550,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         bytes memory options,
         uint256 discountPersentage
     ) internal view returns (uint256) {
-        uint256 totalFee;
-        (, totalFee) = _calculateGasFee(
+        (uint256 totalFee, ) = _calculateGasFee(
             bridge_,
             params,
             protocol,
