@@ -23,8 +23,6 @@ contract EywaDVN is ILayerZeroDVN, AccessControlEnumerable {
 
     uint64 internal constant MAX_CONFIRMATIONS = type(uint64).max;
 
-    uint32 public estimatedGas;
-
     mapping(uint64 => bytes32) public DVN;
 
     address public receiveLib;
