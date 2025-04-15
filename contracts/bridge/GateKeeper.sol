@@ -238,6 +238,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
             currentOptions,
             discounts[address(0)]
         );
+        
         require(msg.value >= gasFee, "GateKeeper: not enough value");
         (bool success, ) = treasuries[protocol].call{value: gasFee}("");
         require(success, "GateKeeper: failed to send Ether");
@@ -341,7 +342,6 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         uint256 nonce;
         bytes memory collectedData;
         {
-            nonce = ++nonces[msg.sender];
             (requestId, nonce, collectedData) = _buildData(to, chainIdTo, data);
             sentDataHash[msg.sender][nonce] = keccak256(abi.encode(
                 IBridge.SendParams({
