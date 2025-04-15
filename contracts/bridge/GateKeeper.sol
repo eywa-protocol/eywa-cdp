@@ -230,7 +230,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
             params.data = _encodeOut(abi.encode(params.data, protocol, requestId), 0x00);
         }
 
-        uint256 gasFee = _sendCustomBridge(
+        (, uint256 gasFee) = _sendCustomBridge(
             bridge,
             params,
             nonce,
@@ -357,14 +357,14 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         address[] memory selectedBridges = selectBridgesByPriority(msg.sender, chainIdTo);
         
         require(selectedBridges.length > 0, "GateKeeper: zero selected bridges");
-        uint256 totalFee;
+        uint256 sendFee;
         for (uint8 i; i < selectedBridges.length; ++i) {
             if (i == 0) {
                 out = _encodeOut(abi.encode(collectedData, msg.sender, requestId), 0x00); // isHash false
             } else if (i == 1) {
                 out = _encodeOut(abi.encode(keccak256(collectedData), msg.sender, requestId), 0x01); // isHash true
             }
-            totalFee += _sendCustomBridge(
+            (uint256 totalFee,) = _sendCustomBridge(
                 selectedBridges[i], 
                 IBridge.SendParams({
                         requestId: requestId,
@@ -377,9 +377,10 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
                 currentOptions[i],
                 discounts[msg.sender]
             );
+            sendFee += totalFee;
         }
         emit DataSent(selectedBridges, requestId, collectedData, to, chainIdTo, nonce, msg.sender);
-        return totalFee;
+        return sendFee;
     }
 
     /**
@@ -525,7 +526,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         address protocol,
         bytes memory options,
         uint256 discountPersentage
-    ) internal returns(uint256) {
+    ) internal returns(uint256, uint256) {
         uint256 gasFee;
         uint256 totalFee;
         (totalFee, gasFee) = _calculateGasFee(
@@ -542,7 +543,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
             nonce,
             options
         );
-        return totalFee;
+        return (totalFee, gasFee);
     }
 
     function _quoteCustomBridge(
