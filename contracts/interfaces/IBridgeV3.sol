@@ -27,5 +27,4 @@ interface IBridgeV3 is IBridge {
 
     function receiveV3(ReceiveParams[] calldata params) external returns (bool);
 
-    function nonces(address sender) external returns(uint256);
 }

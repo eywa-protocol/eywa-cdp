@@ -26,8 +26,6 @@ contract BridgeV3 is IBridgeV3, AccessControlEnumerable, Typecast, ReentrancyGua
     /// @dev operator role id
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
 
-    /// @dev nonce for senders
-    mapping(address => uint256) public nonces;
     /// @dev receiver that store thresholds
     address public receiver;
     address public priceOracle;
@@ -134,8 +132,6 @@ contract BridgeV3 is IBridgeV3, AccessControlEnumerable, Typecast, ReentrancyGua
     ) external payable onlyRole(GATEKEEPER_ROLE) {
         require(state == State.Active, "Bridge: state inactive");
         require(previousEpoch.isSet() || currentEpoch.isSet(), "Bridge: epoch not set");
-        require(nonce > nonces[sender], "Bridge: wrong nonce");
-        nonces[sender] = nonce;
 
         address to = address(uint160(uint256(params.to)));
 
