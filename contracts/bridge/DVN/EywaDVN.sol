@@ -19,6 +19,7 @@ contract EywaDVN is ILayerZeroDVN, AccessControlEnumerable {
 
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
     bytes32 public constant RECEIVER_ROLE = keccak256("RECEIVER_ROLE");
+    bytes32 public constant SENDLIB_ROLE = keccak256("SENDLIB_ROLE");
 
     uint64 internal constant MAX_CONFIRMATIONS = type(uint64).max;
 
@@ -71,7 +72,7 @@ contract EywaDVN is ILayerZeroDVN, AccessControlEnumerable {
         emit ReceiveLibSet(receiveLib_);
     }
 
-    function assignJob(AssignJobParam calldata param_, bytes calldata LZoptions_) external payable returns (uint256 fee) {
+    function assignJob(AssignJobParam calldata param_, bytes calldata LZoptions_) external payable onlyRole(SENDLIB_ROLE) returns (uint256 fee) {
         (bytes memory data, bytes32 DVN_, uint64 chainIdTo) = _prepareCallData(param_.dstEid, param_.packetHeader, param_.payloadHash);
         IGateKeeper(gateKeeper).sendData(
             data,
