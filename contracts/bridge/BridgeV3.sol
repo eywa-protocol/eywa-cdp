@@ -224,11 +224,11 @@ contract BridgeV3 is IBridgeV3, AccessControlEnumerable, Typecast, ReentrancyGua
                 }
                 if (receivedData[receivedData.length - 1] == 0x01){
                     require(payload.length == 96, "Bridge: Invalid message length");
-                    (bytes32 payload_, bytes32 sender, ) = abi.decode(receivedData, (bytes32, bytes32, bytes32));
-                    IReceiver(receiver).receiveHash(sender, payload_, requestId);
+                    (bytes32 payload_, bytes32 sender, uint256 chainIdFrom, ) = abi.decode(receivedData, (bytes32, bytes32, uint256, bytes32));
+                    IReceiver(receiver).receiveHash(sender, uint64(chainIdFrom), payload_, requestId);
                 } else if (receivedData[receivedData.length - 1] == 0x00) {
-                    (bytes memory payload_, bytes32 sender, ) = abi.decode(receivedData, (bytes, bytes32, bytes32));
-                    IReceiver(receiver).receiveData(sender, payload_, requestId);
+                    (bytes memory payload_, bytes32 sender, uint256 chainIdFrom, ) = abi.decode(receivedData, (bytes, bytes32, uint256, bytes32));
+                    IReceiver(receiver).receiveData(sender, uint64(chainIdFrom), payload_, requestId);
                 } else {
                     revert("Bridge: wrong message");
                 }

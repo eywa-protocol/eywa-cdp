@@ -435,15 +435,14 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         uint256 nonce;
         bytes memory collectedData;
         (requestId, nonce, collectedData) = _buildData(to, chainIdTo, data);
-
         address[] memory selectedBridges = selectBridgesByPriority(msg.sender, uint64(chainIdTo));
         bytes memory out;
         uint256 totalFee;
         for (uint8 i; i < selectedBridges.length; ++i) {
             if (i == 0) {
-                out = _encodeOut(abi.encode(collectedData, castToBytes32(msg.sender), requestId), 0x00); // isHash false
+                out = _encodeOut(abi.encode(collectedData, castToBytes32(msg.sender), block.chainid, requestId), 0x00); // isHash false
             } else if (i == 1) {
-                out = _encodeOut(abi.encode(keccak256(collectedData), castToBytes32(msg.sender), requestId), 0x01); // isHash true
+                out = _encodeOut(abi.encode(keccak256(collectedData), castToBytes32(msg.sender), block.chainid, requestId), 0x01); // isHash true
             }
             totalFee += _quoteCustomBridge(
                 selectedBridges[i], 

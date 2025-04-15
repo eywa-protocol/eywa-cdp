@@ -10,6 +10,8 @@ import "../../interfaces/IBridgeV3.sol";
 import "../../interfaces/IAddressBook.sol";
 import "../../interfaces/IReceiver.sol";
 import "../../interfaces/INativeTreasury.sol";
+
+
 contract ReceiverLZ is OAppReceiver, AccessControlEnumerable {
     
     /// @dev operator role id
@@ -58,20 +60,21 @@ contract ReceiverLZ is OAppReceiver, AccessControlEnumerable {
     ) internal override {
         bytes32 requestId;
         bytes32 sender;
+        uint256 chainIdFrom;
         uint256 length = message_.length - 1;
         bytes memory message = new bytes(length);
         for (uint i; i < length; ++i) {
             message[i] = message_[i];
         }
-        if (message_[message_.length - 1] == 0x01){
+        if (message_[message_.length - 1] == 0x01) {
             require(message.length == 96, "ReceiverLZ: Invalid message length");
             bytes32 payload;
-            (payload, sender, requestId) = abi.decode(message, (bytes32, bytes32, bytes32));
-            IReceiver(receiver).receiveHash(sender, payload, requestId);
+            (payload, sender, chainIdFrom, requestId) = abi.decode(message, (bytes32, bytes32, uint256, bytes32));
+            IReceiver(receiver).receiveHash(sender, uint64(chainIdFrom), payload, requestId);
         } else if (message_[message_.length - 1] == 0x00) {
             bytes memory payload;
-            (payload, sender, requestId) = abi.decode(message, (bytes, bytes32, bytes32));
-            IReceiver(receiver).receiveData(sender, payload, requestId);
+            (payload, sender, chainIdFrom, requestId) = abi.decode(message, (bytes, bytes32, uint256, bytes32));
+            IReceiver(receiver).receiveData(sender, uint64(chainIdFrom), payload, requestId);
         } else {
             revert("ReceiverLZ: wrong message");
         }

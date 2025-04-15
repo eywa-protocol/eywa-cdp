@@ -9,18 +9,20 @@ import "../../interfaces/IReceiver.sol";
 import "../../interfaces/IAddressBook.sol";
 import "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
 
+
 contract ReceiverAxelar is AxelarExpressExecutable, AccessControlEnumerable {
 
     using StringToAddress for string;
     
     /// @dev address of main receiver, that stores data and hashes
     address public immutable receiver;
-
     /// @dev operator role id
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
-
+    /// @dev approved peers
     mapping(string sourceChain => address peer) public peers;
+
     event PeerSet(string sourceChain, address peer);
+
 
     constructor(address gateway_, address gasService_, address receiver_) AxelarExpressExecutable(gateway_) {
         require(gateway_ != address(0), "ReceiverAxelar: zero address");
@@ -56,6 +58,7 @@ contract ReceiverAxelar is AxelarExpressExecutable, AccessControlEnumerable {
         require(peers[sourceChain] == sourceAddress.toAddress(), "ReceiverAxelar: wrong peer");
         bytes32 requestId;
         bytes32 sender;
+        uint256 chainIdFrom;
         uint256 length = payload_.length - 1;
         bytes memory data = new bytes(length);
         for (uint i; i < length; ++i) {
@@ -65,12 +68,12 @@ contract ReceiverAxelar is AxelarExpressExecutable, AccessControlEnumerable {
         if (payload_[payload_.length - 1] == 0x01) {
             require(data.length == 96, "ReceiverAxelar: Invalid message length");
             bytes32 payload;
-            (payload, sender, requestId) = abi.decode(data, (bytes32, bytes32, bytes32));
-            IReceiver(receiver).receiveHash(sender, payload, requestId);
+            (payload, sender, chainIdFrom, requestId) = abi.decode(data, (bytes32, bytes32, uint256, bytes32));
+            IReceiver(receiver).receiveHash(sender, uint64(chainIdFrom), payload, requestId);
         } else if (payload_[payload_.length - 1] == 0x00) {
             bytes memory payload;
-            (payload, sender, requestId) = abi.decode(data, (bytes, bytes32, bytes32));
-            IReceiver(receiver).receiveData(sender, payload, requestId);
+            (payload, sender, chainIdFrom, requestId) = abi.decode(data, (bytes, bytes32, uint256, bytes32));
+            IReceiver(receiver).receiveData(sender, uint64(chainIdFrom), payload, requestId);
         } else {
             revert("ReceiverAxelar: wrong message");
         }

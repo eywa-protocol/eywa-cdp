@@ -6,5 +6,7 @@ interface IChainIdAdapter {
 
     function chainIdToDstEid(uint64 chainId) external view returns(uint32);
     function dstEidToChainId(uint32 dstEid) external view returns(uint64);
+    function chainIdToChainName(uint64 chainId) external view returns(string memory);
+    function chainNameToChainId(string memory chainName) external view returns(uint64);
 
 }
