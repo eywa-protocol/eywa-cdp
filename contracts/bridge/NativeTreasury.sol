@@ -26,7 +26,8 @@ contract NativeTreasury is INativeTreasury, Ownable {
      */
     function getValue(uint256 value_) external {
         require(msg.sender == gateKeeper || msg.sender == owner(), "NativeTreasury: only admin or gatekeeper");
-        payable(msg.sender).transfer(value_);
+        (bool success, ) = msg.sender.call{value: value_}("");
+        require(success, "BridgeV3: failed to send Ether");
         emit ValueSent(value_, msg.sender);
     }
 }

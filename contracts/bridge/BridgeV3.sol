@@ -170,7 +170,8 @@ contract BridgeV3 is IBridgeV3, AccessControlEnumerable, Typecast, ReentrancyGua
     }
 
     function withdrawValue(uint256 value_) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        payable(msg.sender).transfer(value_);
+        (bool success, ) = msg.sender.call{value: value_}("");
+        require(success, "BridgeV3: failed to send Ether");
         emit ValueWithdrawn(msg.sender, value_);
     }
 
