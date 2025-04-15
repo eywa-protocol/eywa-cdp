@@ -30,9 +30,16 @@ contract ChainIdAdapter is IChainIdAdapter, AccessControlEnumerable {
         uint256 length = dstEids_.length;
         require(length == chainIds_.length, "ChainIdAdapter: wrong length");
         for (uint32 i; i < length; ++i) {
-            chainIdToDstEid[chainIds_[i]] = dstEids_[i];
-            dstEidToChainId[dstEids_[i]] = chainIds_[i];
-            emit DstEidSet(dstEids_[i], chainIds_[i]);
+            uint64 chainId = chainIds_[i];
+            uint32 dstEid = dstEids_[i];
+
+            uint32 tmpDstEid = chainIdToDstEid[chainId];
+            delete chainIdToDstEid[dstEidToChainId[dstEid]];
+            delete dstEidToChainId[tmpDstEid];
+
+            chainIdToDstEid[chainId] = dstEid;
+            dstEidToChainId[dstEid] = chainId;
+            emit DstEidSet(dstEid, chainId);
         }
     }
 
@@ -40,14 +47,16 @@ contract ChainIdAdapter is IChainIdAdapter, AccessControlEnumerable {
         uint256 length = chainNames_.length;
         require(length == chainIds_.length, "ChainIdAdapter: wrong length");
         for (uint32 i; i < length; ++i) {
-            chainIdToChainName[chainIds_[i]] = chainNames_[i];
-            chainNameToChainId[chainNames_[i]] = chainIds_[i];
-            emit ChainNameSet(chainNames_[i], chainIds_[i]);
+            uint64 chainId = chainIds_[i];
+            string memory chainName = chainNames_[i];
+
+            string memory tmpChainName = chainIdToChainName[chainId];
+            delete chainIdToChainName[chainNameToChainId[chainName]];
+            delete chainNameToChainId[tmpChainName];
+
+            chainIdToChainName[chainIds_[i]] = chainName;
+            chainNameToChainId[chainNames_[i]] = chainId;
+            emit ChainNameSet(chainName, chainId);
         }
     }
-
-
-
-    // TODO add CCIP and Asterism
-
 }
