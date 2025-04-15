@@ -326,8 +326,8 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         bytes32 to,
         uint64 chainIdTo,
         bytes[] memory currentOptions
-    ) external nonReentrant {
-         _sendData(data, to, chainIdTo, currentOptions);
+    ) external nonReentrant returns(uint256) {
+         return _sendData(data, to, chainIdTo, currentOptions);
     }        
 
     function _sendData(
@@ -335,7 +335,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         bytes32 to,
         uint64 chainIdTo,
         bytes[] memory currentOptions
-    ) internal {
+    ) internal returns(uint256) {
         bytes memory out;
         bytes32 requestId;
         uint256 nonce;
@@ -357,13 +357,14 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         address[] memory selectedBridges = selectBridgesByPriority(msg.sender, chainIdTo);
         
         require(selectedBridges.length > 0, "GateKeeper: zero selected bridges");
+        uint256 totalFee;
         for (uint8 i; i < selectedBridges.length; ++i) {
             if (i == 0) {
                 out = _encodeOut(abi.encode(collectedData, msg.sender, requestId), 0x00); // isHash false
             } else if (i == 1) {
                 out = _encodeOut(abi.encode(keccak256(collectedData), msg.sender, requestId), 0x01); // isHash true
             }
-            _sendCustomBridge(
+            totalFee += _sendCustomBridge(
                 selectedBridges[i], 
                 IBridge.SendParams({
                         requestId: requestId,
@@ -378,6 +379,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
             );
         }
         emit DataSent(selectedBridges, requestId, collectedData, to, chainIdTo, nonce, msg.sender);
+        return totalFee;
     }
 
     /**
@@ -462,7 +464,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
             bytes memory info = abi.encodeWithSelector(
                 IValidatedDataReciever.receiveValidatedData.selector,
                 bytes4(data[:4]),
-                msg.sender,
+                castToBytes32(msg.sender),
                 block.chainid
             );
             collectedData = abi.encode(

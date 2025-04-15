@@ -74,7 +74,7 @@ contract EywaDVN is ILayerZeroDVN, AccessControlEnumerable {
 
     function assignJob(AssignJobParam calldata param_, bytes calldata LZoptions_) external payable onlyRole(SENDLIB_ROLE) returns (uint256 fee) {
         (bytes memory data, bytes32 DVN_, uint64 chainIdTo) = _prepareCallData(param_.dstEid, param_.packetHeader, param_.payloadHash);
-        IGateKeeper(gateKeeper).sendData(
+        return IGateKeeper(gateKeeper).sendData(
             data,
             DVN_,
             chainIdTo,
