@@ -40,8 +40,8 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
 
     /// @dev operator role id
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
+    /// @dev treasury admin role
     bytes32 public constant TREASURY_ADMIN_ROLE = keccak256("TREASURY_ADMIN_ROLE");
-
     /// @dev receiver conract
     address public receiver;
     /// @dev chainId => bridge => base fees
@@ -124,8 +124,6 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     }
 
 
-    // TODO think about two types of protocols. With treasury and without treasury
-    // TODO we may do it permission less. Protocl must call IGateKeeper.register protocol
     /**
      * @dev Register protocol, deploy trasury for it
      * 
@@ -331,6 +329,9 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
          return _sendData(data, to, chainIdTo, currentOptions);
     }        
 
+    /**
+     * @dev Sends data to a destination contract
+     */
     function _sendData(
         bytes calldata data,
         bytes32 to,
@@ -406,12 +407,23 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     /**
      * @dev Returns the address of the part of the bridge that delivers to the destination chain.
      * In this case this is receiver contract
+     * NOTE: to support legacy
      */
     function bridge() external view returns(address) {
-        // TODO change in router from onlyBridge(gateKeeper.bridge() to gateKeeper.receiver())
         return receiver;
     }
 
+    /**
+     * @dev Sends data to a destination contract
+     *
+     * @param data The data (encoded with selector) which would be send to the destination contract;
+     * @param to The address of the destination contract;
+     * @param chainIdTo The ID of the chain where the destination contract resides;
+     * @param currentOptions Additional options for bridges. 
+     *  Params must be sorted by priority
+     *  bridge_1 - bridge with priority 1, bridge_2 - bridge with priority 2
+     *  [bridge_1_options, bridge_2_options, bridge_3_options]
+     */
     function estimateGasFee(
         bytes calldata data,
         bytes32 to,
@@ -449,6 +461,13 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         return totalFee;
     }
 
+    /**
+     * @dev Build data, requestId and nonce
+     * 
+     * @param to  address to send
+     * @param chainIdTo chain id to send
+     * @param data data to send
+     */
     function _buildData(bytes32 to, uint64 chainIdTo, bytes calldata data) internal view returns(bytes32, uint256, bytes memory) {
         bytes32 requestId;
         uint256 nonce;
@@ -546,6 +565,15 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         return (totalFee, gasFee);
     }
 
+    /**
+     * @dev Quote fee for send
+     * 
+     * @param bridge_ bridge address
+     * @param params params to send
+     * @param protocol protocol address
+     * @param options  additional options for bridge call
+     * @param discountPersentage  discount persentage
+     */
     function _quoteCustomBridge(
         address bridge_,
         IBridge.SendParams memory params,
@@ -563,6 +591,15 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         return totalFee;
     }
 
+    /**
+     * @dev Calculate fees for send
+     * 
+     * @param bridge_ bridge address
+     * @param params params to send
+     * @param protocol protocol address
+     * @param options  additional options for bridge call
+     * @param discountPersentage  discount persentage
+     */
     function _calculateGasFee(
         address bridge_,
         IBridge.SendParams memory params,

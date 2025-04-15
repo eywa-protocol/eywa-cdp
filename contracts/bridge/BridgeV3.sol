@@ -28,6 +28,7 @@ contract BridgeV3 is IBridgeV3, AccessControlEnumerable, Typecast, ReentrancyGua
 
     /// @dev receiver that store thresholds
     address public receiver;
+    /// @dev priceOracle that store prices for execution
     address public priceOracle;
     /// @dev human readable version
     string public version;
@@ -35,21 +36,18 @@ contract BridgeV3 is IBridgeV3, AccessControlEnumerable, Typecast, ReentrancyGua
     State public state;
     /// @dev received request IDs 
     mapping(uint32 epochNum => mapping(bytes32 => bool)) public requestIdChecker;
-
     // current epoch
     Bls.Epoch internal currentEpoch;
     // previous epoch
     Bls.Epoch internal previousEpoch;
 
     event EpochUpdated(bytes key, uint32 epochNum, uint64 protocolVersion);
-
     event RequestSent(
         bytes32 requestId,
         bytes data,
         address to,
         uint64 chainIdTo
     );
-
     event StateSet(State state);
     event ReceiverSet(address receiver);
     event PriceOracleSet(address priceOracle);
@@ -123,6 +121,9 @@ contract BridgeV3 is IBridgeV3, AccessControlEnumerable, Typecast, ReentrancyGua
      * @dev Send crosschain request v3.
      *
      * @param params struct with requestId, data, receiver and opposite cahinId
+     * @param sender address to where send params
+     * @param nonce unique nonce for send
+     * @param options additional params for send
      */
     function sendV3(
         SendParams calldata params,
@@ -144,6 +145,13 @@ contract BridgeV3 is IBridgeV3, AccessControlEnumerable, Typecast, ReentrancyGua
         emit GasPaid(params.requestId, abi.decode(options, (uint32)));
     }
 
+    /**
+     * @dev Estimate crosschain request v3.
+     *
+     * @param params struct with requestId, data, receiver and opposite cahinId
+     * @param sender address to where send params
+     * @param options additional params for send
+     */
     function estimateGasFee(
         SendParams calldata params,
         address sender,
@@ -158,6 +166,11 @@ contract BridgeV3 is IBridgeV3, AccessControlEnumerable, Typecast, ReentrancyGua
         return fee;
     }
 
+    /**
+     * @dev Withdraw value from this contract.
+     *
+     * @param value_ Amount of value
+     */
     function withdrawValue(uint256 value_) external onlyRole(DEFAULT_ADMIN_ROLE) {
         (bool success, ) = msg.sender.call{value: value_}("");
         require(success, "BridgeV3: failed to send Ether");
@@ -165,7 +178,7 @@ contract BridgeV3 is IBridgeV3, AccessControlEnumerable, Typecast, ReentrancyGua
     }
 
     /**
-     * @dev Receive (batch) crosschain request v2.
+     * @dev Receive crosschain request v3.
      *
      * @param params array with ReceiveParams structs.
      */
@@ -246,13 +259,20 @@ contract BridgeV3 is IBridgeV3, AccessControlEnumerable, Typecast, ReentrancyGua
      * @param receiver_ Receiver address
      */
     function setReceiver(address receiver_) external onlyRole(OPERATOR_ROLE) {
-        require(receiver_ != address(0), "BridgeV2: zero address");
+        require(receiver_ != address(0), "BridgeV3: zero address");
         receiver = receiver_;
         emit ReceiverSet(receiver_);
     }
 
+    /**
+     * @dev Set new price oracle.
+     *
+     * Controlled by operator.
+     *
+     * @param priceOracle_ GasPriceOracle address
+     */
     function setPriceOracle(address priceOracle_) external onlyRole(OPERATOR_ROLE) {
-        require(priceOracle_ != address(0), "BridgeV2: zero address");
+        require(priceOracle_ != address(0), "BridgeV3: zero address");
         priceOracle = priceOracle_;
         emit PriceOracleSet(priceOracle_);
     }

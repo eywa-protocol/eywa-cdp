@@ -74,12 +74,22 @@ contract Receiver is IReceiver, AccessControlEnumerable {
         emit ReceiverCountSet(receiversCount_);
     }
 
+    /**
+     * @notice Get threshold for given address.
+     *
+     * @param sender sender address
+     */
     function getThreshold(address sender) public view returns (uint8) {
         (bool exists, uint256 value) = _threshold.tryGet(sender);
         require(exists, "Receiver: Threshold not set");
         return uint8(value);
     }
 
+    /**
+     * @notice Get threshold at index.
+     *
+     * @param index index
+     */
     function thresholdAt(uint256 index) public view returns (address, uint8) {
         (address key, uint256 value) = _threshold.at(index);
         return (key, uint8(value));
@@ -90,7 +100,7 @@ contract Receiver is IReceiver, AccessControlEnumerable {
     }
 
     /**
-     * @dev Receive full data
+     * @dev Receive full data.
      * 
      * @param sender Source sender
      * @param receivedData Received data
@@ -161,6 +171,13 @@ contract Receiver is IReceiver, AccessControlEnumerable {
         }
     }
 
+    /**
+     * @dev Returns list of receivers
+     * 
+     * @param hash_ hash
+     * @param sender_ sender address
+     * @param requestId_ request id
+     */
     function hashReceivers(bytes32 hash_, address sender_, bytes32 requestId_) public view returns (address[] memory) {
         bytes32 hashKey = _generateHashKey(hash_, sender_, requestId_);
         return _hashReceivers[hashKey].values();
