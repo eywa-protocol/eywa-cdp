@@ -12,8 +12,6 @@ contract GasPriceOracle is IOracle, AccessControlEnumerable {
 
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
 
-    uint64 constant CHAIN_ID_ARBITRUM = 42161;
-
     constructor() {
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
     }
@@ -24,28 +22,16 @@ contract GasPriceOracle is IOracle, AccessControlEnumerable {
         gasPriceOracles[chainId] = gasPriceOracle;
     }
 
-    function getGasPrice(uint64 chainIdTo) external view returns (uint256) {
-        return IOracle(gasPriceOracles[chainIdTo]).getGasPrice(chainIdTo);
-    }
-
-    function getPriceRatio(uint64 chainIdTo) external view returns (uint256) {
-        return IOracle(gasPriceOracles[chainIdTo]).getPriceRatio(chainIdTo);
-    }
-
-    function getGasPerByte(uint64 chainIdTo) external view returns (uint256) {
-        return IOracle(gasPriceOracles[chainIdTo]).getGasPerByte(chainIdTo);
-    }
-
-    function getGasCost(uint64 chainIdTo) external view returns (uint256) {
-        return IOracle(gasPriceOracles[chainIdTo]).getGasCost(chainIdTo);
-    }
-
-    function getPrice(uint64 chainIdTo) external view returns (uint256, uint256) {
-        return IOracle(gasPriceOracles[chainIdTo]).getPrice(chainIdTo);
-    }
-
-    function getPriceArbitrum() external view returns (uint256, uint256, uint256) {
-        return IOracle(gasPriceOracles[CHAIN_ID_ARBITRUM]).getPriceArbitrum();
+    function estimateFeeByChain(
+        uint64 chainIdTo,
+        uint256 callDataLength,
+        uint256 gasExecute
+    ) external view returns (uint256 fee, uint256 priceRatio) {
+        return IOracle(gasPriceOracles[chainIdTo]).estimateFeeByChain(
+            chainIdTo, 
+            callDataLength, 
+            gasExecute
+        );
     }
 }
 

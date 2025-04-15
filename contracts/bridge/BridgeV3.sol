@@ -26,8 +26,6 @@ contract BridgeV3 is IBridgeV3, AccessControlEnumerable, Typecast, ReentrancyGua
     /// @dev operator role id
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
 
-    uint64 constant CHAIN_ID_ETHEREUM = 1;
-
     /// @dev nonce for senders
     mapping(address => uint256) public nonces;
     /// @dev receiver that store thresholds
@@ -39,8 +37,6 @@ contract BridgeV3 is IBridgeV3, AccessControlEnumerable, Typecast, ReentrancyGua
     State public state;
     /// @dev received request IDs 
     mapping(uint32 epochNum => mapping(bytes32 => bool)) public requestIdChecker;
-
-    mapping(uint64 => ChainType) public chainTypes;
 
     // current epoch
     Bls.Epoch internal currentEpoch;
@@ -66,7 +62,6 @@ contract BridgeV3 is IBridgeV3, AccessControlEnumerable, Typecast, ReentrancyGua
     event StateSet(State state);
     event ReceiverSet(address receiver);
     event PriceOracleSet(address priceOracle);
-    event ChainTypeSet(uint64 chainId, ChainType chainType);
     event ValueWithdrawn(address to, uint256 amount);
     event GasPaid(bytes32 requestId, uint32 gasAmount);
 
@@ -165,36 +160,13 @@ contract BridgeV3 is IBridgeV3, AccessControlEnumerable, Typecast, ReentrancyGua
         address sender,
         bytes memory options
     ) public view returns (uint256) {
-        ChainType chainType = chainTypes[params.chainIdTo];
         uint32 gasExecute = abi.decode(options, (uint32));
-        if (chainType == ChainType.DEFAULT) {
-            return _estimateGasFeeDefault(params.chainIdTo, gasExecute, params.data.length);
-        } else if (chainType == ChainType.ARBITRUM) {
-            return _estimateGasFeeArbitrum(params.chainIdTo, gasExecute, params.data.length);
-        } else if (chainType == ChainType.OPTIMISM) {
-            return  _estimateGasFeeOptimism(params.chainIdTo, gasExecute, params.data.length);
-        }
-    }
-
-    function _estimateGasFeeDefault(uint64 chainIdTo, uint256 gasExecute, uint256 callDataBytesLength) internal view returns(uint256) {
-        (uint256 gasCost, uint256 gasPerByte) = IOracle(priceOracle).getPrice(chainIdTo);
-        return (gasExecute + callDataBytesLength * gasPerByte) * gasCost;
-    }
-
-    function _estimateGasFeeArbitrum(uint64 chainIdTo, uint256 gasExecute, uint256 callDataBytesLength) internal view returns(uint256) {
-        (uint256 gasCost, uint256 gasPerByte) = IOracle(priceOracle).getPrice(chainIdTo);
-        (uint256 gasPerL2Tx, uint256 gasPerL1CallData, uint256 arbitrumCompressionPercent) = IOracle(priceOracle).getPriceArbitrum();
-        uint256 gasCallDataL1 = (callDataBytesLength * arbitrumCompressionPercent / 100 * gasPerL1CallData);
-        return (gasExecute + gasPerL2Tx + gasCallDataL1 + callDataBytesLength * gasPerByte) * gasCost;
-
-    }
-
-    function _estimateGasFeeOptimism(uint64 chainIdTo, uint256 gasExecute, uint256 callDataBytesLength) internal view returns(uint256) {
-        (uint256 gasCost, uint256 gasPerByte) = IOracle(priceOracle).getPrice(chainIdTo);
-        (uint256 gasCostL1, uint256 gasPerByteL1) = IOracle(priceOracle).getPrice(CHAIN_ID_ETHEREUM);
-        uint256 feeL1 = ((callDataBytesLength * gasPerByteL1) * gasCostL1);
-        uint256 feeL2 = (gasExecute + callDataBytesLength * gasPerByte) * gasCost;
-        return  feeL1 + feeL2;
+        (uint256 fee,) = IOracle(priceOracle).estimateFeeByChain(
+            params.chainIdTo, 
+            params.data.length, 
+            gasExecute
+        );
+        return fee;
     }
 
     function withdrawValue(uint256 value_) external onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -287,15 +259,6 @@ contract BridgeV3 is IBridgeV3, AccessControlEnumerable, Typecast, ReentrancyGua
         require(receiver_ != address(0), "BridgeV2: zero address");
         receiver = receiver_;
         emit ReceiverSet(receiver_);
-    }
-
-    function setChainType(uint64[] memory chainIds_, ChainType[] memory chainTypes_) external onlyRole(OPERATOR_ROLE) {
-        uint256 length = chainIds_.length;
-        require(length == chainTypes_.length, "Bridge: wrong count");
-        for (uint32 i; i < length; ++i) {
-            chainTypes[chainIds_[i]] = chainTypes_[i];
-            emit ChainTypeSet(chainIds_[i], chainTypes_[i]);
-        }
     }
 
     function setPriceOracle(address priceOracle_) external onlyRole(OPERATOR_ROLE) {

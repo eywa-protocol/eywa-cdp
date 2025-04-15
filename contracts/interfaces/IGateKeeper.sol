@@ -16,7 +16,7 @@ interface IGateKeeper {
         bytes32 to,
         uint64 chainIdTo,
         bytes[] memory options
-    ) external;
+    ) external returns(uint256);
 
     function estimateGasFee(
         bytes calldata data,

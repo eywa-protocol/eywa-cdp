@@ -37,36 +37,16 @@ contract LayerZeroOracle is IOracle, AccessControlEnumerable {
         emit ChainIdAdapterSet(chainIdAdapter_);
     }
 
-    function getGasPrice(uint64 chainIdTo) external view returns (uint256) {
-        return _getPrice(chainIdTo).gasPriceInUnit;
-    }
-
-    function getPriceRatio(uint64 chainIdTo) external view returns (uint256) {
-        return _getPrice(chainIdTo).priceRatio;
-    }
-
-    function getGasPerByte(uint64 chainIdTo) external view returns (uint256) {
-        return _getPrice(chainIdTo).gasPerByte;
-    }
-
-    function getGasCost(uint64 chainIdTo) external view returns (uint256) {
-        ILayerZeroPriceFeed.Price memory price = _getPrice(chainIdTo);
-        return price.gasPriceInUnit * price.priceRatio;
-    }
-
-    function getPrice(uint64 chainIdTo) public view returns (uint256, uint256) {
-        ILayerZeroPriceFeed.Price memory price = _getPrice(chainIdTo);
-        return (price.gasPriceInUnit * price.priceRatio / PRICE_RATIO_DENOMINATOR, price.gasPerByte);
-    }
-
-    function getPriceArbitrum() external view returns (uint256, uint256, uint256) {
-        ILayerZeroPriceFeed.ArbitrumPriceExt memory arbitrumPrice = ILayerZeroPriceFeed(priceFeed).arbitrumPriceExt();
-        uint256 arbitrumCompressionPercent = ILayerZeroPriceFeed(priceFeed).ARBITRUM_COMPRESSION_PERCENT();
-        return (arbitrumPrice.gasPerL2Tx, arbitrumPrice.gasPerL1CallDataByte, arbitrumCompressionPercent);
-    }
-
-    function _getPrice(uint64 chainIdTo) internal view returns (ILayerZeroPriceFeed.Price memory) {
+    function estimateFeeByChain(
+        uint64 chainIdTo,
+        uint256 callDataLength,
+        uint256 gasExecute
+    ) external view returns (uint256 fee, uint256 priceRatio) {
         uint32 dstEid = IChainIdAdapter(chainIdAdapter).chainIdToDstEid(chainIdTo);
-        return ILayerZeroPriceFeed(priceFeed).getPrice(dstEid);
+        (fee, priceRatio) = ILayerZeroPriceFeed(priceFeed).estimateFeeByChain(
+            uint16(dstEid), 
+            callDataLength, 
+            gasExecute
+        );
     }
 }
