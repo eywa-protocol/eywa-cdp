@@ -5,6 +5,7 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import "@openzeppelin/contracts/utils/structs/EnumerableMap.sol";
 import "../interfaces/IReceiver.sol";
 import "../interfaces/IAddressBook.sol";
 
@@ -12,6 +13,7 @@ contract Receiver is IReceiver, AccessControlEnumerable {
 
     using Address for address;
     using EnumerableSet for EnumerableSet.AddressSet;
+    using EnumerableMap for EnumerableMap.AddressToUintMap;
 
     /// @dev bridge role id
     bytes32 public constant RECEIVER_ROLE = keccak256("RECEIVER_ROLE");
@@ -22,7 +24,7 @@ contract Receiver is IReceiver, AccessControlEnumerable {
     /// @dev hash -> data
     mapping(bytes32 => bytes) public payload;
     /// @dev protocol -> threshold
-    mapping(address => uint8) public threshold;
+    EnumerableMap.AddressToUintMap private _threshold;
     /// @dev hash -> execute status
     mapping(bytes32 => bool) public executedData;
     /// @dev receivers count
@@ -50,9 +52,9 @@ contract Receiver is IReceiver, AccessControlEnumerable {
         for (uint8 i; i < length; ++i) {
             require(threshold_[i] >= 1, "Receiver: wrong threshold");
             require(threshold_[i] <= receiversCount, "Receiver: wrong threshold");
-            threshold[sender[i]] = threshold_[i];
+            _threshold.set(sender[i], threshold_[i]);
         }
-        emit  ThresholdSet(sender, threshold_);
+        emit ThresholdSet(sender, threshold_);
     }
 
     /**
@@ -62,8 +64,29 @@ contract Receiver is IReceiver, AccessControlEnumerable {
      */
     function setReceiversCount(uint8 receiversCount_) external onlyRole(OPERATOR_ROLE) {
         require(receiversCount_ >= 1, "Receiver: wrong receivers count");
+        uint256 thresholdLength_ = thresholdLength();
+        uint8 threshold_;
+        for(uint32 i; i < thresholdLength_; ++i) {
+            (, threshold_) = thresholdAt(i);
+            require(threshold_ <= receiversCount_, "Receiver: threshold bigger than receiversCount");
+        }
         receiversCount = receiversCount_;
         emit ReceiverCountSet(receiversCount_);
+    }
+
+    function getThreshold(address sender) public view returns (uint8) {
+        (bool exists, uint256 value) = _threshold.tryGet(sender);
+        require(exists, "Receiver: Threshold not set");
+        return uint8(value);
+    }
+
+    function thresholdAt(uint256 index) public view returns (address, uint8) {
+        (address key, uint256 value) = _threshold.at(index);
+        return (key, uint8(value));
+    }
+
+    function thresholdLength() public view returns (uint256) {
+        return _threshold.length();
     }
 
     /**
@@ -73,7 +96,7 @@ contract Receiver is IReceiver, AccessControlEnumerable {
      * @param receivedData Received data
      */
     function receiveData(address sender, bytes memory receivedData, bytes32 requestId) external onlyRole(RECEIVER_ROLE) {
-        uint8 threshold_ = threshold[sender];
+        uint8 threshold_ = getThreshold(sender);
         require(threshold_ > 0, "Receiver: threshold is not set");
         bytes32 hashKey = _generateHashKey(keccak256(receivedData), sender, requestId);
         if(_hashReceivers[hashKey].contains(msg.sender)) {
@@ -104,7 +127,7 @@ contract Receiver is IReceiver, AccessControlEnumerable {
      * @param receivedHash Received hash
      */
     function receiveHash(address sender, bytes32 receivedHash, bytes32 requestId) external onlyRole(RECEIVER_ROLE) {
-        uint8 threshold_ = threshold[sender];
+        uint8 threshold_ = getThreshold(sender);
         require(threshold_ > 0, "Receiver: threshold is not set");
         bytes32 hashKey = _generateHashKey(receivedHash, sender, requestId);
         require(!_hashReceivers[hashKey].contains(msg.sender), "Receiver: already received");
@@ -133,7 +156,7 @@ contract Receiver is IReceiver, AccessControlEnumerable {
         bytes32 hashKey = _generateHashKey(hash_, sender_, requestId_);
         bytes memory receivedData = payload[hashKey];
         require(receivedData.length != 0, "Receiver: data not received");
-        if (!_execute(_hashReceivers[hashKey].length(), threshold[sender_], receivedData, hashKey, requestId_)) {
+        if (!_execute(_hashReceivers[hashKey].length(), getThreshold(sender_), receivedData, hashKey, requestId_)) {
             revert("Receiver: not executed");
         }
     }
