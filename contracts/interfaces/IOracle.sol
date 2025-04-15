@@ -6,16 +6,10 @@ pragma solidity ^0.8.17;
 
 interface IOracle {
 
-    function getGasPrice(uint64 chainId) external view returns(uint256);
-
-    function getPriceRatio(uint64 chainId) external view returns(uint256);
-
-    function getGasCost(uint64 chainId) external view returns(uint256);
-
-    function getGasPerByte(uint64 chainId) external view returns(uint256);
-
-    function getPrice(uint64 chainId) external view returns(uint256 gasCost, uint256 gasPerByte);
-
-    function getPriceArbitrum() external view returns(uint256, uint256, uint256);
+    function estimateFeeByChain(
+        uint64 chainIdTo,
+        uint256 callDataLength,
+        uint256 gasExecute
+    ) external view returns (uint256 fee, uint256 priceRatio);
 }
 

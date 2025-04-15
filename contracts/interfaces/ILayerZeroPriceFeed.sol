@@ -62,4 +62,10 @@ interface ILayerZeroPriceFeed {
         uint256 _callDataSize,
         uint256 _gas
     ) external payable returns (uint256 fee, uint128 priceRatio, uint128 priceRatioDenominator, uint128 nativePriceUSD);
+
+    function estimateFeeByChain(
+        uint16 _dstEid,
+        uint256 _callDataSize,
+        uint256 _gas
+    ) external view returns (uint256 fee, uint128 priceRatio);
 }

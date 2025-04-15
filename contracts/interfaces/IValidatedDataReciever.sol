@@ -12,8 +12,8 @@ interface IValidatedDataReciever {
      *
      * @param selector selector which will be called;
      * @param from sender address in source chain;
-     * @param chainIdFrom source chain id. TODO change to uint64
+     * @param chainIdFrom source chain id.
      */
-    function receiveValidatedData(bytes4 selector, address from, uint64 chainIdFrom) external returns (bool);
+    function receiveValidatedData(bytes4 selector, bytes32 from, uint64 chainIdFrom) external returns (bool);
 
 }
