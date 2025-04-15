@@ -9,6 +9,9 @@ import { OAppSender, OAppCore, Origin, MessagingFee } from "@layerzerolabs/lz-ev
 import { IGateKeeper } from "../../interfaces/IGateKeeper.sol";
 import "../../interfaces/IBridge.sol";
 import "../../interfaces/INativeTreasury.sol";
+import "../../interfaces/IChainIdAdapter.sol";
+
+
 contract BridgeLZ is OAppSender, IBridge, AccessControlEnumerable, ReentrancyGuard {
     
     using Address for address;
@@ -21,12 +24,12 @@ contract BridgeLZ is OAppSender, IBridge, AccessControlEnumerable, ReentrancyGua
     IBridge.State public state;
     /// @dev nonces
     mapping(address => uint256) public nonces;
-    /// @dev chainIdTo => dstEid
-    mapping(uint64 => uint32) public dstEids;
+    /// @dev ChainIdAdapter address
+    address public chainIdAdapter;
 
     event StateSet(IBridge.State state);
     event TreasurySet(address treasury);
-    event DstEidSet(uint256 chainIdTo, uint32 dstEid);
+    event ChainIdAdapterSet(address);
 
     constructor(address _endpoint, address _owner) OAppCore(_endpoint, _owner) {
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
@@ -47,6 +50,16 @@ contract BridgeLZ is OAppSender, IBridge, AccessControlEnumerable, ReentrancyGua
     }
 
     /**
+     * @dev Set ChainIdAdapter address.
+     * 
+     * @param chainIdAdapter_ ChainIdAdapter address
+     */
+    function setChainIdAdapter(address chainIdAdapter_) external onlyRole(OPERATOR_ROLE) {
+        chainIdAdapter = chainIdAdapter_;
+        emit ChainIdAdapterSet(chainIdAdapter_);
+    }
+
+    /**
      * @dev Set new state.
      *
      * Controlled by operator. Can be used to emergency pause send or send and receive data.
@@ -58,18 +71,6 @@ contract BridgeLZ is OAppSender, IBridge, AccessControlEnumerable, ReentrancyGua
         emit StateSet(state);
     }
 
-    /**
-     * @dev Set dstEid for chainId
-     * 
-     * @param chainIdTo_ Chain ID to send
-     * @param dstEid_ DstEid of chain
-     */
-    function setDstEid(uint64 chainIdTo_, uint32 dstEid_) external onlyRole(OPERATOR_ROLE) {
-        require(chainIdTo_ != 0, "BridgeLZ: zero value");
-        require(dstEid_ != 0, "BridgeLZ: zero value");
-        dstEids[chainIdTo_] = dstEid_;
-        emit DstEidSet(chainIdTo_, dstEid_);
-    }
 
     /**
      * @dev Send params to chainIdTo
@@ -102,7 +103,7 @@ contract BridgeLZ is OAppSender, IBridge, AccessControlEnumerable, ReentrancyGua
     ) internal returns (bool) {
         require(state == IBridge.State.Active, "Bridge: state inactive");
 
-        uint32 dstEid = dstEids[chainIdTo];
+        uint32 dstEid = IChainIdAdapter(chainIdAdapter).chainIdToDstEid(chainIdTo);
         MessagingFee memory gasFee = _quote(dstEid, data, options, false);
         _lzSend(
             dstEid,
@@ -142,7 +143,7 @@ contract BridgeLZ is OAppSender, IBridge, AccessControlEnumerable, ReentrancyGua
         address sender,
         bytes memory options
     ) public view returns(uint256) {
-        uint32 dstEid = dstEids[uint64(params.chainIdTo)];
+        uint32 dstEid = IChainIdAdapter(chainIdAdapter).chainIdToDstEid(uint64(params.chainIdTo));
         return _quote(dstEid, params.data, options, false).nativeFee;
     }
 

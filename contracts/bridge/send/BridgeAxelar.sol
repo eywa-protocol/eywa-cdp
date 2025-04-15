@@ -13,6 +13,7 @@ import { IAxelarGasService } from "@axelar-network/axelar-gmp-sdk-solidity/contr
 import { IGateKeeper } from "../../interfaces/IGateKeeper.sol";
 import "../../interfaces/IBridge.sol";
 import "../../interfaces/INativeTreasury.sol";
+import "../../interfaces/IChainIdAdapter.sol";
 
 
 contract BridgeAxelar is AxelarExpressExecutable, IBridge, AccessControlEnumerable, ReentrancyGuard {
@@ -27,16 +28,17 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridge, AccessControlEnumerab
     IBridge.State public state;
     /// @dev nonces
     mapping(address => uint256) public nonces;
-    /// @dev chainIdTo => dstEid
-    mapping(uint64 => string) public networkById;
     /// @dev chainIdTo => receiver
     mapping (uint64 => address) public receivers;
     /// @dev Axelar gas service
     IAxelarGasService public immutable gasService;
+    /// @dev ChainIdAdapter address
+    address public chainIdAdapter;
 
     event StateSet(IBridge.State state);
     event NetworkSet(uint64 chainIdTo, string network);
     event ReceiverSet(uint64 chainIdTo, address receiver);
+    event ChainIdAdapterSet(address);
 
     constructor(address gateway_, address gasService_) AxelarExpressExecutable(gateway_) {
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
@@ -48,17 +50,6 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridge, AccessControlEnumerab
     receive() external payable {}
 
     /**
-     * @dev Set network for chainId
-     * 
-     * @param chainIdTo_ Chain ID to send
-     * @param network_ Network name of chain
-     */
-    function setDestinationNetwork(uint64 chainIdTo_, string memory network_) external onlyRole(OPERATOR_ROLE) {
-        networkById[chainIdTo_] = network_;
-        emit NetworkSet(chainIdTo_, network_);
-    }
-
-    /**
      * @dev Set receiver for chainId
      * 
      * @param chainIdTo_ Chain ID of receiver
@@ -66,6 +57,16 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridge, AccessControlEnumerab
     function setReceiver(uint64 chainIdTo_, address receiver_) external onlyRole(OPERATOR_ROLE) {
         receivers[chainIdTo_] = receiver_;
         emit ReceiverSet(chainIdTo_, receiver_);
+    }
+
+    /**
+     * @dev Set ChainIdAdapter address.
+     * 
+     * @param chainIdAdapter_ ChainIdAdapter address
+     */
+    function setChainIdAdapter(address chainIdAdapter_) external onlyRole(OPERATOR_ROLE) {
+        chainIdAdapter = chainIdAdapter_;
+        emit ChainIdAdapterSet(chainIdAdapter_);
     }
 
     /**
@@ -171,7 +172,6 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridge, AccessControlEnumerab
             bytes memory options
         ) = _unpackParams(params, options_);
         _payGas(destinationChain, destinationAddress, params.data, gasLimit, sender, options);
-
         gateway.callContract(
             destinationChain,
             destinationAddress,
@@ -197,7 +197,7 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridge, AccessControlEnumerab
             bytes memory options
         ) {
             uint64 chainIdTo = uint64(params.chainIdTo);
-            destinationChain = networkById[chainIdTo];
+            destinationChain = IChainIdAdapter(chainIdAdapter).chainIdToChainName(chainIdTo);
             destinationAddress = Strings.toHexString(uint160(receivers[chainIdTo]), 20);
             (gasLimit, options) = abi.decode(options_, (uint256, bytes));
         }
