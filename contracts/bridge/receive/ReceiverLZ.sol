@@ -57,7 +57,7 @@ contract ReceiverLZ is OAppReceiver, AccessControlEnumerable {
         bytes calldata extraData_
     ) internal override {
         bytes32 requestId;
-        address sender;
+        bytes32 sender;
         uint256 length = message_.length - 1;
         bytes memory message = new bytes(length);
         for (uint i; i < length; ++i) {
@@ -66,11 +66,11 @@ contract ReceiverLZ is OAppReceiver, AccessControlEnumerable {
         if (message_[message_.length - 1] == 0x01){
             require(message.length == 96, "ReceiverLZ: Invalid message length");
             bytes32 payload;
-            (payload, sender, requestId) = abi.decode(message, (bytes32, address, bytes32));
+            (payload, sender, requestId) = abi.decode(message, (bytes32, bytes32, bytes32));
             IReceiver(receiver).receiveHash(sender, payload, requestId);
         } else if (message_[message_.length - 1] == 0x00) {
             bytes memory payload;
-            (payload, sender, requestId) = abi.decode(message, (bytes, address, bytes32));
+            (payload, sender, requestId) = abi.decode(message, (bytes, bytes32, bytes32));
             IReceiver(receiver).receiveData(sender, payload, requestId);
         } else {
             revert("ReceiverLZ: wrong message");

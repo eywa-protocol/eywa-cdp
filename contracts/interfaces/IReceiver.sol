@@ -4,6 +4,6 @@ pragma solidity ^0.8.17;
 
 
 interface IReceiver {
-    function receiveData(address sender, bytes memory receivedData, bytes32 requestId) external;
-    function receiveHash(address sender, bytes32 receivedHash, bytes32 requestId) external;
+    function receiveData(bytes32 sender, bytes memory receivedData, bytes32 requestId) external;
+    function receiveHash(bytes32 sender, bytes32 receivedHash, bytes32 requestId) external;
 }

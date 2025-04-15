@@ -55,7 +55,7 @@ contract ReceiverAxelar is AxelarExpressExecutable, AccessControlEnumerable {
     ) internal override {
         require(peers[sourceChain] == sourceAddress.toAddress(), "ReceiverAxelar: wrong peer");
         bytes32 requestId;
-        address sender;
+        bytes32 sender;
         uint256 length = payload_.length - 1;
         bytes memory data = new bytes(length);
         for (uint i; i < length; ++i) {
@@ -65,11 +65,11 @@ contract ReceiverAxelar is AxelarExpressExecutable, AccessControlEnumerable {
         if (payload_[payload_.length - 1] == 0x01) {
             require(data.length == 96, "ReceiverAxelar: Invalid message length");
             bytes32 payload;
-            (payload, sender, requestId) = abi.decode(data, (bytes32, address, bytes32));
+            (payload, sender, requestId) = abi.decode(data, (bytes32, bytes32, bytes32));
             IReceiver(receiver).receiveHash(sender, payload, requestId);
         } else if (payload_[payload_.length - 1] == 0x00) {
             bytes memory payload;
-            (payload, sender, requestId) = abi.decode(data, (bytes, address, bytes32));
+            (payload, sender, requestId) = abi.decode(data, (bytes, bytes32, bytes32));
             IReceiver(receiver).receiveData(sender, payload, requestId);
         } else {
             revert("ReceiverAxelar: wrong message");

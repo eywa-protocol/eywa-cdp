@@ -13,7 +13,7 @@ contract Receiver is IReceiver, AccessControlEnumerable {
 
     using Address for address;
     using EnumerableSet for EnumerableSet.AddressSet;
-    using EnumerableMap for EnumerableMap.AddressToUintMap;
+    using EnumerableMap for EnumerableMap.Bytes32ToUintMap;
 
     /// @dev bridge role id
     bytes32 public constant RECEIVER_ROLE = keccak256("RECEIVER_ROLE");
@@ -24,13 +24,13 @@ contract Receiver is IReceiver, AccessControlEnumerable {
     /// @dev hash -> data
     mapping(bytes32 => bytes) public payload;
     /// @dev protocol -> threshold
-    EnumerableMap.AddressToUintMap private _threshold;
+    EnumerableMap.Bytes32ToUintMap private _threshold;
     /// @dev hash -> execute status
     mapping(bytes32 => bool) public executedData;
     /// @dev receivers count
     uint8 public receiversCount;
 
-    event ThresholdSet(address[] sender, uint8[] threshold);
+    event ThresholdSet(bytes32[] sender, uint8[] threshold);
     event ReceiverCountSet(uint8 receiverCount);
     event RequestExecuted(bytes32 requestId);
     event Received(address receiver, bytes32 requestId, bool isHash);
@@ -46,7 +46,7 @@ contract Receiver is IReceiver, AccessControlEnumerable {
      * @param sender The protocol contract addresses;
      * @param threshold_ The thresholds for the given contract addresses.
      */
-    function setThreshold(address[] memory sender, uint8[] memory threshold_) external onlyRole(OPERATOR_ROLE) {
+    function setThreshold(bytes32[] memory sender, uint8[] memory threshold_) external onlyRole(OPERATOR_ROLE) {
         uint8 length = uint8(sender.length);
         require(length == threshold_.length, "Receiver: wrong count");
         for (uint8 i; i < length; ++i) {
@@ -79,7 +79,7 @@ contract Receiver is IReceiver, AccessControlEnumerable {
      *
      * @param sender sender address
      */
-    function getThreshold(address sender) public view returns (uint8) {
+    function getThreshold(bytes32 sender) public view returns (uint8) {
         (bool exists, uint256 value) = _threshold.tryGet(sender);
         require(exists, "Receiver: Threshold not set");
         return uint8(value);
@@ -90,8 +90,8 @@ contract Receiver is IReceiver, AccessControlEnumerable {
      *
      * @param index index
      */
-    function thresholdAt(uint256 index) public view returns (address, uint8) {
-        (address key, uint256 value) = _threshold.at(index);
+    function thresholdAt(uint256 index) public view returns (bytes32, uint8) {
+        (bytes32 key, uint256 value) = _threshold.at(index);
         return (key, uint8(value));
     }
 
@@ -105,7 +105,7 @@ contract Receiver is IReceiver, AccessControlEnumerable {
      * @param sender Source sender
      * @param receivedData Received data
      */
-    function receiveData(address sender, bytes memory receivedData, bytes32 requestId) external onlyRole(RECEIVER_ROLE) {
+    function receiveData(bytes32 sender, bytes memory receivedData, bytes32 requestId) external onlyRole(RECEIVER_ROLE) {
         uint8 threshold_ = getThreshold(sender);
         require(threshold_ > 0, "Receiver: threshold is not set");
         bytes32 hashKey = _generateHashKey(keccak256(receivedData), sender, requestId);
@@ -136,7 +136,7 @@ contract Receiver is IReceiver, AccessControlEnumerable {
      * @param sender Source sende
      * @param receivedHash Received hash
      */
-    function receiveHash(address sender, bytes32 receivedHash, bytes32 requestId) external onlyRole(RECEIVER_ROLE) {
+    function receiveHash(bytes32 sender, bytes32 receivedHash, bytes32 requestId) external onlyRole(RECEIVER_ROLE) {
         uint8 threshold_ = getThreshold(sender);
         require(threshold_ > 0, "Receiver: threshold is not set");
         bytes32 hashKey = _generateHashKey(receivedHash, sender, requestId);
@@ -162,7 +162,7 @@ contract Receiver is IReceiver, AccessControlEnumerable {
      * @param sender_ source chain bridge caller
      * @param requestId_ request id
      */
-    function execute(bytes32 hash_, address sender_, bytes32 requestId_) external {
+    function execute(bytes32 hash_, bytes32 sender_, bytes32 requestId_) external {
         bytes32 hashKey = _generateHashKey(hash_, sender_, requestId_);
         bytes memory receivedData = payload[hashKey];
         require(receivedData.length != 0, "Receiver: data not received");
@@ -178,7 +178,7 @@ contract Receiver is IReceiver, AccessControlEnumerable {
      * @param sender_ sender address
      * @param requestId_ request id
      */
-    function hashReceivers(bytes32 hash_, address sender_, bytes32 requestId_) public view returns (address[] memory) {
+    function hashReceivers(bytes32 hash_, bytes32 sender_, bytes32 requestId_) public view returns (address[] memory) {
         bytes32 hashKey = _generateHashKey(hash_, sender_, requestId_);
         return _hashReceivers[hashKey].values();
     }
@@ -228,7 +228,7 @@ contract Receiver is IReceiver, AccessControlEnumerable {
         }
     }
 
-    function _generateHashKey(bytes32 hash_, address sender_, bytes32 requestId_) internal pure returns(bytes32) {
+    function _generateHashKey(bytes32 hash_, bytes32 sender_, bytes32 requestId_) internal pure returns(bytes32) {
         return keccak256(abi.encode(hash_, sender_, requestId_));
     }
 }
