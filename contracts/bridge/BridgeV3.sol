@@ -52,13 +52,6 @@ contract BridgeV3 is IBridgeV3, AccessControlEnumerable, Typecast, ReentrancyGua
         uint64 chainIdTo
     );
 
-    event RequestSentV2(
-        bytes32 requestId,
-        bytes data,
-        bytes32 to,
-        uint64 chainIdTo
-    );
-
     event StateSet(State state);
     event ReceiverSet(address receiver);
     event PriceOracleSet(address priceOracle);
