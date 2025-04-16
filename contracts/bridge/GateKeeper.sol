@@ -16,7 +16,6 @@ import { INativeTreasuryFactory } from '../interfaces/INativeTreasuryFactory.sol
 import { NativeTreasury } from '../bridge/NativeTreasury.sol';
 import { INativeTreasury } from  "../interfaces/INativeTreasury.sol";
 
-
 contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, ReentrancyGuard {
     using Address for address;
 
@@ -223,9 +222,10 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
             nonce
         );
         if (isHash) {
-            params.data = _encodeOut(abi.encode(keccak256(params.data), protocol, requestId), 0x01);
+            params.data = _encodeOut(params.data, protocol, requestId, true);
+
         } else {
-            params.data = _encodeOut(abi.encode(params.data, protocol, requestId), 0x00);
+            params.data = _encodeOut(params.data, protocol, requestId, false);
         }
 
         (, uint256 gasFee) = _sendCustomBridge(
@@ -361,9 +361,9 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         uint256 sendFee;
         for (uint8 i; i < selectedBridges.length; ++i) {
             if (i == 0) {
-                out = _encodeOut(abi.encode(collectedData, msg.sender, requestId), 0x00); // isHash false
+                out = _encodeOut(collectedData, msg.sender, requestId, false);
             } else if (i == 1) {
-                out = _encodeOut(abi.encode(keccak256(collectedData), msg.sender, requestId), 0x01); // isHash true
+                out = _encodeOut(collectedData, msg.sender, requestId, true);
             }
             (uint256 totalFee,) = _sendCustomBridge(
                 selectedBridges[i], 
@@ -440,9 +440,9 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         uint256 totalFee;
         for (uint8 i; i < selectedBridges.length; ++i) {
             if (i == 0) {
-                out = _encodeOut(abi.encode(collectedData, castToBytes32(msg.sender), block.chainid, requestId), 0x00); // isHash false
+                out = _encodeOut(collectedData, msg.sender, requestId, false);
             } else if (i == 1) {
-                out = _encodeOut(abi.encode(keccak256(collectedData), castToBytes32(msg.sender), block.chainid, requestId), 0x01); // isHash true
+                out = _encodeOut(collectedData, msg.sender, requestId, true);
             }
             totalFee += _quoteCustomBridge(
                 selectedBridges[i], 
@@ -499,16 +499,32 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     /**
      * @dev Encode out data, add isHash bytes to end
      * 
-     * @param out  out data
+     * @param collectedData  collected data
+     * @param sender protocol address
+     * @param requestId request id
      * @param isHash is hash flag
      */
-    function _encodeOut(bytes memory out, bytes1 isHash) internal pure returns(bytes memory newOut) {
+    function _encodeOut(
+        bytes memory collectedData, 
+        address sender, 
+        bytes32 requestId, 
+        bool isHash
+    ) internal view returns(bytes memory newOut) {
+        bytes memory out;
+        bytes1 isHashByte;
+        if (isHash) {
+            out = abi.encode(keccak256(collectedData), castToBytes32(sender), block.chainid, requestId);
+            isHashByte = 0x01;
+        } else {
+            out = abi.encode(collectedData, castToBytes32(sender), block.chainid, requestId);
+            isHashByte = 0x00;
+        }
         uint256 length = out.length;
         newOut = new bytes(length + 1);
         for (uint j; j < length; ++j) {
             newOut[j] = out[j];
         }
-        newOut[length] = isHash;
+        newOut[length] = isHashByte;
     }
 
     /**
