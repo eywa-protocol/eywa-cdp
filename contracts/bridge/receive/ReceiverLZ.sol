@@ -59,11 +59,7 @@ contract ReceiverLZ is OAppReceiver, AccessControlEnumerable {
         bytes32 requestId;
         bytes32 sender;
         uint256 chainIdFrom;
-        uint256 length = message_.length - 1;
-        bytes memory message = new bytes(length);
-        for (uint i; i < length; ++i) {
-            message[i] = message_[i];
-        }
+        bytes calldata message = message_[0 : message_.length - 1];
         if (message_[message_.length - 1] == 0x01) {
             require(message.length == 128, "ReceiverLZ: Invalid message length");
             bytes32 payload;
