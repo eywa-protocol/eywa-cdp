@@ -8,7 +8,7 @@ import "../interfaces/INativeTreasury.sol";
 import "../interfaces/IGateKeeper.sol";
 
 contract NativeTreasury is INativeTreasury, Ownable {
-    address public gateKeeper;
+    address public immutable gateKeeper;
     event ValueSent(uint256 value, address to);
 
     constructor(address admin_) {
