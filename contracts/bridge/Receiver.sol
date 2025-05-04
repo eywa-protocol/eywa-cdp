@@ -44,11 +44,13 @@ contract Receiver is IReceiver, AccessControlEnumerable {
      * @notice Sets multiple sender's threshold. Must be the same on the sender's side.
      *
      * @param sender The protocol contract addresses;
+     * @param chainIdFrom The chain id from for the given contract addresses.
      * @param threshold_ The thresholds for the given contract addresses.
      */
     function setThreshold(bytes32[] memory sender, uint64[] memory chainIdFrom, uint8[] memory threshold_) external onlyRole(OPERATOR_ROLE) {
         uint8 length = uint8(sender.length);
         require(length == threshold_.length, "Receiver: wrong count");
+        require(length == chainIdFrom.length, "Receiver: wrong count");
         for (uint8 i; i < length; ++i) {
             require(threshold_[i] >= 1, "Receiver: wrong threshold");
             require(threshold_[i] <= receiversCount, "Receiver: wrong threshold");
