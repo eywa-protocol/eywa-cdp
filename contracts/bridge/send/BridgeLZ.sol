@@ -102,7 +102,7 @@ contract BridgeLZ is OAppSender, IBridge, AccessControlEnumerable, ReentrancyGua
         bytes memory options
     ) internal returns (bool) {
         require(state == IBridge.State.Active, "Bridge: state inactive");
-
+        require(chainIdAdapter != address(0), "Bridge: chainId adapter not set");
         uint32 dstEid = IChainIdAdapter(chainIdAdapter).chainIdToDstEid(chainIdTo);
         MessagingFee memory gasFee = _quote(dstEid, data, options, false);
         _lzSend(

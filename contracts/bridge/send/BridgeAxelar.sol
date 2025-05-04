@@ -197,6 +197,7 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridge, AccessControlEnumerab
             bytes memory options
         ) {
             uint64 chainIdTo = uint64(params.chainIdTo);
+            require(chainIdAdapter != address(0), "Bridge: chainId adapter not set");
             destinationChain = IChainIdAdapter(chainIdAdapter).chainIdToChainName(chainIdTo);
             destinationAddress = Strings.toHexString(uint160(receivers[chainIdTo]), 20);
             (gasLimit, options) = abi.decode(options_, (uint256, bytes));
