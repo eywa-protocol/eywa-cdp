@@ -17,8 +17,6 @@ contract LayerZeroOracle is IOracle, AccessControlEnumerable {
 
     address public chainIdAdapter;
 
-    uint128 private constant PRICE_RATIO_DENOMINATOR = 1e20;
-
     event PriceFeedSet(address);
     event ChainIdAdapterSet(address);
 
