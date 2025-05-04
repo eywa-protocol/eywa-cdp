@@ -344,6 +344,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         bytes memory collectedData;
         {
             (requestId, nonce, collectedData) = _buildData(to, chainIdTo, data);
+            nonces[msg.sender]++;
             sentDataHash[msg.sender][nonce] = keccak256(abi.encode(
                 IBridge.SendParams({
                         requestId: requestId,
