@@ -10,7 +10,6 @@ import { IChainIdAdapter } from "../../interfaces/IChainIdAdapter.sol";
 import { IReceiveUln } from "../../interfaces/IReceiveUln.sol";
 import "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
 
-
 contract EywaDVN is ILayerZeroDVN, AccessControlEnumerable {
     
     /// @dev GateKeeper address
@@ -25,6 +24,8 @@ contract EywaDVN is ILayerZeroDVN, AccessControlEnumerable {
     bytes32 public constant SENDLIB_ROLE = keccak256("SENDLIB_ROLE");
     /// @dev defines max confirmation as LZ-DVN
     uint64 internal constant MAX_CONFIRMATIONS = type(uint64).max;
+    /// @dev packet header size version(uint8) + nonce(uint64) + path(uint32,bytes32,uint32,bytes32)
+    uint256 internal constant PACKET_HEADER_SIZE = 81;
     /// @dev list of DVNs on other chains
     mapping(uint64 => bytes32) public DVN;
     /// @dev receive lib address
@@ -129,8 +130,7 @@ contract EywaDVN is ILayerZeroDVN, AccessControlEnumerable {
         address _sender,
         bytes calldata _options
     ) external view returns (uint256 fee) {
-
-        bytes memory packetHeader;
+        bytes memory packetHeader = new bytes(PACKET_HEADER_SIZE);
         bytes32 payloadHash;
         (bytes memory data, bytes32 DVN_, uint64 chainIdTo) = _prepareCallData(_dstEid, packetHeader, payloadHash);
          return IGateKeeper(gateKeeper).estimateGasFee(
