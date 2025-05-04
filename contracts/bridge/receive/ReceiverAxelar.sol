@@ -66,7 +66,7 @@ contract ReceiverAxelar is AxelarExpressExecutable, AccessControlEnumerable {
         }
 
         if (payload_[payload_.length - 1] == 0x01) {
-            require(data.length == 96, "ReceiverAxelar: Invalid message length");
+            require(data.length == 128, "ReceiverAxelar: Invalid message length");
             bytes32 payload;
             (payload, sender, chainIdFrom, requestId) = abi.decode(data, (bytes32, bytes32, uint256, bytes32));
             IReceiver(receiver).receiveHash(sender, uint64(chainIdFrom), payload, requestId);

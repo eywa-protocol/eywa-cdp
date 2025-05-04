@@ -67,7 +67,7 @@ contract ReceiverLZ is OAppReceiver, AccessControlEnumerable {
             message[i] = message_[i];
         }
         if (message_[message_.length - 1] == 0x01) {
-            require(message.length == 96, "ReceiverLZ: Invalid message length");
+            require(message.length == 128, "ReceiverLZ: Invalid message length");
             bytes32 payload;
             (payload, sender, chainIdFrom, requestId) = abi.decode(message, (bytes32, bytes32, uint256, bytes32));
             IReceiver(receiver).receiveHash(sender, uint64(chainIdFrom), payload, requestId);
