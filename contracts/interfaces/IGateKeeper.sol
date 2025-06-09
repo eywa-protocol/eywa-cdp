@@ -23,7 +23,7 @@ interface IGateKeeper {
         bytes32 to,
         uint64 chainIdTo,
         bytes[] memory options
-    ) external view returns(uint256);
+    ) external view returns(uint256, uint256);
 
     function nonces(address protocol) external view returns (uint256 nonce);
 

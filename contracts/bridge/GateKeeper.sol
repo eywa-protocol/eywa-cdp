@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-// Copyright (c) Eywa.Fi, 2021-2023 - all rights reserved
+// Copyright (c) Eywa.Fi, 2021-2025 - all rights reserved
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
@@ -15,6 +15,7 @@ import "../interfaces/IValidatedDataReciever.sol";
 import { INativeTreasuryFactory } from '../interfaces/INativeTreasuryFactory.sol';
 import { NativeTreasury } from '../bridge/NativeTreasury.sol';
 import { INativeTreasury } from  "../interfaces/INativeTreasury.sol";
+import { IExecutorFeeManager } from "../interfaces/IExecutorFeeManager.sol";
 
 contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, ReentrancyGuard {
     using Address for address;
@@ -61,6 +62,10 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     mapping(bytes32 => uint8) public threshold;
     /// @dev msg.sender -> nonce -> hash of data
     mapping(address => mapping(uint256 => bytes32)) public sentDataHash;
+    /// @dev msg.sender -> executor
+    mapping(address => address) public executors;
+    /// @dev auto executable flag
+    mapping(address => bool) public isAutoExecutable;
 
     event ReceiverSet(address receiver);
     event BaseFeeSet(uint64 chainId, address bridge, uint256 fee);
@@ -68,6 +73,8 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     event DiscountSet(address protocol, uint256 discount);
     event FeesWithdrawn(address token, uint256 amount, address to);
     event ThresholdSet(address sender, uint64[] chainIds, uint8[] threshold);
+    event ExecutorSet(address protocol, address executor);
+    event AutoExecutableSet(address sender, bool isAutoExecutable);
     event BridgeRegistered(address bridge, bool status);
     event BridgesPriorityUpdated(address protocol, uint64[] chainIds, address[][] bridges);
     event DataSent(
@@ -85,7 +92,15 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         uint256 nonce, 
         address sender
     );
-
+    event ExecutionPaid(
+        bytes32 requestId, 
+        uint64 chainIdTo, 
+        bytes options, 
+        uint256 executeGasFee,
+        address sender,
+        address treasury,
+        address executor
+    );
 
     constructor(address receiver_) {
         require(receiver_ != address(0), "GateKeeper: zero address");
@@ -122,6 +137,17 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         emit ReceiverSet(receiver_);
     }
 
+    function setExecutor(address protocol, address executor) external onlyRole(OPERATOR_ROLE) {
+        require(protocol != address(0), "GateKeeper: zero address");
+        require(executor != address(0), "GateKeeper: zero address");
+        executors[protocol] = executor;
+        emit ExecutorSet(protocol, executor);
+    }
+
+    function setAutoExecutableStatus(address sender, bool isAutoExecutable_) external onlyRole(OPERATOR_ROLE) {
+        isAutoExecutable[sender] = isAutoExecutable_;
+        emit AutoExecutableSet(sender, isAutoExecutable_);
+    }
 
     /**
      * @dev Register protocol, deploy trasury for it
@@ -315,10 +341,10 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
      * @param data The data (encoded with selector) which would be send to the destination contract;
      * @param to The address of the destination contract;
      * @param chainIdTo The ID of the chain where the destination contract resides;
-     * @param currentOptions Additional options for bridges. 
+     * @param currentOptions Additional options for bridges and executors. 
      *  Params must be sorted by priority
      *  bridge_1 - bridge with priority 1, bridge_2 - bridge with priority 2
-     *  [bridge_1_options, bridge_2_options, bridge_3_options]
+     *  [bridge_1_options, bridge_2_options, bridge_3_options, executor_options]
      */
     function sendData(
         bytes calldata data,
@@ -326,7 +352,10 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         uint64 chainIdTo,
         bytes[] memory currentOptions
     ) external nonReentrant returns(uint256) {
-         return _sendData(data, to, chainIdTo, currentOptions);
+        (uint256 sendFee, bytes32 requestId) = _sendData(data, to, chainIdTo, currentOptions);
+        if (isAutoExecutable[msg.sender]) {
+            uint256 executeFee = _payForExecute(requestId, chainIdTo, currentOptions[currentOptions.length - 1]);
+        }
     }        
 
     /**
@@ -337,9 +366,8 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         bytes32 to,
         uint64 chainIdTo,
         bytes[] memory currentOptions
-    ) internal returns(uint256) {
+    ) internal returns(uint256 sendFee, bytes32 requestId) {
         bytes memory out;
-        bytes32 requestId;
         uint256 nonce;
         bytes memory collectedData;
         {
@@ -359,30 +387,42 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         address[] memory selectedBridges = selectBridgesByPriority(msg.sender, chainIdTo);
         
         require(selectedBridges.length > 0, "GateKeeper: zero selected bridges");
-        uint256 sendFee;
-        for (uint8 i; i < selectedBridges.length; ++i) {
-            if (i == 0) {
-                out = _encodeOut(collectedData, msg.sender, requestId, false);
-            } else if (i == 1) {
-                out = _encodeOut(collectedData, msg.sender, requestId, true);
+        {
+            for (uint8 i; i < selectedBridges.length; ++i) {
+                if (i == 0) {
+                    out = _encodeOut(collectedData, msg.sender, requestId, false);
+                } else if (i == 1) {
+                    out = _encodeOut(collectedData, msg.sender, requestId, true);
+                }
+                (uint256 totalFee,) = _sendCustomBridge(
+                    selectedBridges[i], 
+                    IBridge.SendParams({
+                            requestId: requestId,
+                            data: out,
+                            to: to,
+                            chainIdTo: chainIdTo
+                    }), 
+                    nonce,
+                    msg.sender,
+                    currentOptions[i],
+                    discounts[msg.sender]
+                );
+                sendFee += totalFee;
             }
-            (uint256 totalFee,) = _sendCustomBridge(
-                selectedBridges[i], 
-                IBridge.SendParams({
-                        requestId: requestId,
-                        data: out,
-                        to: to,
-                        chainIdTo: chainIdTo
-                }), 
-                nonce,
-                msg.sender,
-                currentOptions[i],
-                discounts[msg.sender]
-            );
-            sendFee += totalFee;
         }
+
         emit DataSent(selectedBridges, requestId, collectedData, to, chainIdTo, nonce, msg.sender);
-        return sendFee;
+        return (sendFee, requestId);
+    }
+
+    function _payForExecute(bytes32 requestId, uint64 chainIdTo, bytes memory options) internal returns(uint256) {
+        address executor = executors[msg.sender];
+        address treasury = treasuries[msg.sender];
+        uint256 executeGasFee = IExecutorFeeManager(executor).estimateExecutorGasFee(chainIdTo, options);
+        INativeTreasury(treasury).getValue(executeGasFee);
+        IExecutorFeeManager(executor).payExecutorGasFee{value: executeGasFee}(requestId, chainIdTo, options);
+        emit ExecutionPaid(requestId, chainIdTo, options, executeGasFee, msg.sender, treasury, executor);
+        return executeGasFee;
     }
 
     /**
@@ -430,22 +470,21 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         bytes32 to,
         uint64 chainIdTo,
         bytes[] memory currentOptions
-    ) public view returns (uint256) {
-
+    ) public view returns (uint256, uint256) {
         bytes32 requestId;
         uint256 nonce;
         bytes memory collectedData;
         (requestId, nonce, collectedData) = _buildData(to, chainIdTo, data);
         address[] memory selectedBridges = selectBridgesByPriority(msg.sender, uint64(chainIdTo));
         bytes memory out;
-        uint256 totalFee;
+        uint256 sendFee;
         for (uint8 i; i < selectedBridges.length; ++i) {
             if (i == 0) {
                 out = _encodeOut(collectedData, msg.sender, requestId, false);
             } else if (i == 1) {
                 out = _encodeOut(collectedData, msg.sender, requestId, true);
             }
-            totalFee += _quoteCustomBridge(
+            sendFee += _quoteCustomBridge(
                 selectedBridges[i], 
                 IBridge.SendParams({
                         requestId: requestId,
@@ -458,7 +497,9 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
                 discounts[msg.sender]
             );
         }
-        return totalFee;
+        uint256 executeFee = IExecutorFeeManager(executors[msg.sender]).estimateExecutorGasFee(chainIdTo, currentOptions[currentOptions.length - 1]);
+        uint256 totalFee = sendFee + executeFee;
+        return (totalFee, executeFee);
     }
 
     /**

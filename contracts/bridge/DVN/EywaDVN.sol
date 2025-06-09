@@ -133,12 +133,13 @@ contract EywaDVN is ILayerZeroDVN, AccessControlEnumerable {
         bytes memory packetHeader = new bytes(PACKET_HEADER_SIZE);
         bytes32 payloadHash;
         (bytes memory data, bytes32 DVN_, uint64 chainIdTo) = _prepareCallData(_dstEid, packetHeader, payloadHash);
-         return IGateKeeper(gateKeeper).estimateGasFee(
+        (fee, ) = IGateKeeper(gateKeeper).estimateGasFee(
             data,
             DVN_,
             chainIdTo,
             options
         );
+        return fee;
     }
 
     /**

@@ -20,7 +20,7 @@ contract Receiver is IReceiver, AccessControlEnumerable {
     /// @dev operator role id
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
     /// @dev hash -> receiver's addresses from where hash received
-    mapping(bytes32 => EnumerableSet.AddressSet) internal _hashReceivers;
+    mapping(bytes32 => EnumerableSet.AddressSet) internal _receivesCount;
     /// @dev hash -> data
     mapping(bytes32 => bytes) public payload;
     /// @dev protocol -> threshold
@@ -29,11 +29,15 @@ contract Receiver is IReceiver, AccessControlEnumerable {
     mapping(bytes32 => bool) public executedData;
     /// @dev receivers count
     uint8 public receiversCount;
+    /// @dev auto executable flag
+    mapping(bytes32 => bool) public isAutoExecutable;
+
 
     event ThresholdSet(bytes32[] sender, uint64[] chainIdFrom, uint8[] threshold);
     event ReceiverCountSet(uint8 receiverCount);
     event RequestExecuted(bytes32 requestId);
     event Received(address receiver, bytes32 requestId, bool isHash);
+    event AutoExecutableSet(bytes32 sender, bool isAutoExecutable);
 
     constructor() {
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
@@ -76,6 +80,11 @@ contract Receiver is IReceiver, AccessControlEnumerable {
         emit ReceiverCountSet(receiversCount_);
     }
 
+    function setAutoExecutableStatus(bytes32 sender, bool isAutoExecutable_) external onlyRole(OPERATOR_ROLE) {
+        isAutoExecutable[sender] = isAutoExecutable_;
+        emit AutoExecutableSet(sender, isAutoExecutable_);
+    }
+
     /**
      * @notice Get threshold for given address.
      *
@@ -111,23 +120,20 @@ contract Receiver is IReceiver, AccessControlEnumerable {
         uint8 threshold_ = getThreshold(sender, chainIdFrom);
         require(threshold_ > 0, "Receiver: threshold is not set");
         bytes32 hashKey = _generateHashKey(keccak256(receivedData), sender, requestId);
-        if(_hashReceivers[hashKey].contains(msg.sender)) {
-            if(_execute(_hashReceivers[hashKey].length(), threshold_, receivedData, hashKey, requestId)){
-                emit Received(msg.sender, requestId, false);
-                return;
-            }
-        } else {
-            if(_execute(_hashReceivers[hashKey].length() + 1, threshold_, receivedData, hashKey, requestId)){
-                emit Received(msg.sender, requestId, false);
-                return;
-            }
-            _hashReceivers[hashKey].add(msg.sender);
+
+        if(!_receivesCount[hashKey].contains(msg.sender)) {
+            _receivesCount[hashKey].add(msg.sender);
         }
 
-        if (payload[hashKey].length == 0) {
-            payload[hashKey] = receivedData;
+        uint256 currentThreshold = _receivesCount[hashKey].length();
+        uint256 targetThreshold = getThreshold(sender, chainIdFrom);
+
+        if(isAutoExecutable[sender] && currentThreshold >= targetThreshold) {
+            _execute(currentThreshold, targetThreshold, receivedData, hashKey, requestId);  
         } else {
-            revert("Receiver: already received");
+            if (payload[hashKey].length == 0) {
+                payload[hashKey] = receivedData;
+            }
         }
         emit Received(msg.sender, requestId, false);
     }
@@ -142,17 +148,15 @@ contract Receiver is IReceiver, AccessControlEnumerable {
         uint8 threshold_ = getThreshold(sender, chainIdFrom);
         require(threshold_ > 0, "Receiver: threshold is not set");
         bytes32 hashKey = _generateHashKey(receivedHash, sender, requestId);
-        require(!_hashReceivers[hashKey].contains(msg.sender), "Receiver: already received");
-        if (
-            !_execute(
-                _hashReceivers[hashKey].length() + 1,
-                threshold_,
-                payload[hashKey],
-                hashKey, 
-                requestId
-            )
-        ) {
-            _hashReceivers[hashKey].add(msg.sender);
+        require(!_receivesCount[hashKey].contains(msg.sender), "Receiver: already received");
+        _receivesCount[hashKey].add(msg.sender);
+
+        if(isAutoExecutable[sender]) {
+            uint256 currentThreshold = _receivesCount[hashKey].length();
+            uint256 targetThreshold = getThreshold(sender, chainIdFrom);
+            if (currentThreshold >= targetThreshold && payload[hashKey].length != 0) {
+                _execute(currentThreshold, targetThreshold, payload[hashKey], hashKey, requestId);
+            }
         }
         emit Received(msg.sender, requestId, true);
     }
@@ -164,11 +168,11 @@ contract Receiver is IReceiver, AccessControlEnumerable {
      * @param sender_ source chain bridge caller
      * @param requestId_ request id
      */
-    function execute(bytes32 hash_, bytes32 sender_, uint64 chainIdFrom, bytes32 requestId_) external {
+    function execute(bytes32 hash_, bytes32 sender_, uint64 chainIdFrom, bytes32 requestId_) public {
         bytes32 hashKey = _generateHashKey(hash_, sender_, requestId_);
         bytes memory receivedData = payload[hashKey];
         require(receivedData.length != 0, "Receiver: data not received");
-        if (!_execute(_hashReceivers[hashKey].length(), getThreshold(sender_, chainIdFrom), receivedData, hashKey, requestId_)) {
+        if (!_execute(_receivesCount[hashKey].length(), getThreshold(sender_, chainIdFrom), receivedData, hashKey, requestId_)) {
             revert("Receiver: not executed");
         }
     }
@@ -182,7 +186,7 @@ contract Receiver is IReceiver, AccessControlEnumerable {
      */
     function hashReceivers(bytes32 hash_, bytes32 sender_, bytes32 requestId_) public view returns (address[] memory) {
         bytes32 hashKey = _generateHashKey(hash_, sender_, requestId_);
-        return _hashReceivers[hashKey].values();
+        return _receivesCount[hashKey].values();
     }
 
     /**
@@ -216,8 +220,8 @@ contract Receiver is IReceiver, AccessControlEnumerable {
             bytes memory result = executor.functionCall(check);
             require(abi.decode(result, (bool)), "Receiver: check failed");
             executor.functionCall(data, "Receiver: receive failed");
-            _eraseEnumerableSet(_hashReceivers[hashKey]);
-            delete _hashReceivers[hashKey];
+            _eraseEnumerableSet(_receivesCount[hashKey]);
+            delete _receivesCount[hashKey];
             delete payload[hashKey];
             emit RequestExecuted(requestId);
             return true;
