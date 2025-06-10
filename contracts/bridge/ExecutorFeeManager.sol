@@ -9,14 +9,17 @@ import { IOracle } from "../interfaces/IOracle.sol";
 contract ExecutorFeeManager is IExecutorFeeManager, AccessControlEnumerable {
 
     uint256 constant public CALLDATA_LENGTH = 0;
-
-    bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
+    bytes32 constant public OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
+    bytes32 constant public EXECUTOR_ROLE = keccak256("EXECUTOR_ROLE");
 
     address public priceOracle;
+    mapping(bytes32 => uint256) public paidFees;
+    mapping(bytes32 => address) public refundTargets;
 
     event PriceOracleSet(address);
-    event ExecutorFeePaid(bytes32 requestId, uint64 chainIdTo, bytes options, uint256 fee);
+    event ExecutorFeePaid(bytes32 requestId, uint64 chainIdTo, bytes options, uint256 fee, address refundTarget);
     event ValueWithdrawn(address to, uint256 amount);
+    event FeeRefunded(bytes32 requestId, address to, uint256 amount);   
 
     constructor() {
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
@@ -37,10 +40,31 @@ contract ExecutorFeeManager is IExecutorFeeManager, AccessControlEnumerable {
         return fee;
     }
 
-    function payExecutorGasFee(bytes32 requestId, uint64 chainIdTo, bytes memory options) external payable {
+    function payExecutorGasFee(bytes32 requestId, uint64 chainIdTo, bytes memory options, address refundTarget) external payable {
         uint256 fee = estimateExecutorGasFee(chainIdTo, options);
-        require(msg.value >= fee, "Executor: not enough value");
-        emit ExecutorFeePaid(requestId, chainIdTo, options, fee);
+        require(msg.value >= fee, "ExecutorFeeManager: not enough value");
+        paidFees[requestId] += msg.value;
+        if (refundTargets[requestId] == address(0)) {
+            require(refundTarget != address(0), "ExecutorFeeManager: Invalid refund target");
+            refundTargets[requestId] = refundTarget;
+        }
+        emit ExecutorFeePaid(requestId, chainIdTo, options, fee, refundTarget);
+    }
+
+    function refund(bytes32 requestId, uint256 amount) external onlyRole(EXECUTOR_ROLE) {
+        uint256 maxRefund = paidFees[requestId];
+        address to = refundTargets[requestId];
+
+        require(amount <= maxRefund, "ExecutorFeeManager: excess amount");
+        require(to != address(0), "ExecutorFeeManager: No refund target set");
+
+        paidFees[requestId] = 0;
+        refundTargets[requestId] = address(0);
+
+        (bool success, ) = payable(to).call{value: amount}("");
+        require(success, "ExecutorFeeManager: failed to send Ether");
+
+        emit FeeRefunded(requestId, to, amount);
     }
 
     /**

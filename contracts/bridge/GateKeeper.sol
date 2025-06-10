@@ -420,7 +420,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         address treasury = treasuries[msg.sender];
         uint256 executeGasFee = IExecutorFeeManager(executor).estimateExecutorGasFee(chainIdTo, options);
         INativeTreasury(treasury).getValue(executeGasFee);
-        IExecutorFeeManager(executor).payExecutorGasFee{value: executeGasFee}(requestId, chainIdTo, options);
+        IExecutorFeeManager(executor).payExecutorGasFee{value: executeGasFee}(requestId, chainIdTo, options, treasury);
         emit ExecutionPaid(requestId, chainIdTo, options, executeGasFee, msg.sender, treasury, executor);
         return executeGasFee;
     }

@@ -7,6 +7,6 @@ interface IExecutorFeeManager {
 
     function estimateExecutorGasFee(uint64 chainIdTo, bytes memory options) external view returns(uint256);
 
-    function payExecutorGasFee(bytes32 sentHash, uint64 chainIdTo, bytes memory options) external payable;
+    function payExecutorGasFee(bytes32 sentHash, uint64 chainIdTo, bytes memory options, address refundTarget) external payable;
 
 }
