@@ -3,7 +3,6 @@
 pragma solidity ^0.8.20;
 
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
-
 import "../interfaces/INativeTreasury.sol";
 import "../interfaces/IGateKeeper.sol";
 
@@ -27,7 +26,7 @@ contract NativeTreasury is INativeTreasury, Ownable {
     function getValue(uint256 value_) external {
         require(msg.sender == gateKeeper || msg.sender == owner(), "NativeTreasury: only admin or gatekeeper");
         (bool success, ) = msg.sender.call{value: value_}("");
-        require(success, "BridgeV3: failed to send Ether");
+        require(success, "NativeTreasury: failed to send Ether");
         emit ValueSent(value_, msg.sender);
     }
 }

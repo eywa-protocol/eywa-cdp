@@ -351,11 +351,13 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         bytes32 to,
         uint64 chainIdTo,
         bytes[] memory currentOptions
-    ) external nonReentrant returns(uint256) {
+    ) external nonReentrant returns(uint256 fee) {
+        uint256 executeFee;
         (uint256 sendFee, bytes32 requestId) = _sendData(data, to, chainIdTo, currentOptions);
         if (isAutoExecutable[msg.sender]) {
-            uint256 executeFee = _payForExecute(requestId, chainIdTo, currentOptions[currentOptions.length - 1]);
+            executeFee = _payForExecute(requestId, chainIdTo, currentOptions[currentOptions.length - 1]);
         }
+        return sendFee + executeFee;
     }        
 
     /**

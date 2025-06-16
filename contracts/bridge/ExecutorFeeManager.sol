@@ -25,6 +25,8 @@ contract ExecutorFeeManager is IExecutorFeeManager, AccessControlEnumerable {
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
     }
 
+    receive() external payable {}
+
     function setPriceOracle(address priceOracle_) external onlyRole(OPERATOR_ROLE) {
         priceOracle = priceOracle_;
         emit PriceOracleSet(priceOracle_);
