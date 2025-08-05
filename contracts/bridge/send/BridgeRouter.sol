@@ -246,6 +246,7 @@ contract BridgeRouter is IBridge, AccessControlEnumerable, ReentrancyGuard {
      * @param options_ The Router Protocol call options
      * @notice This function handles the actual Router Protocol interaction
      * @notice Reverts if bridge is inactive
+     * @notice Forwards the iSendDefaultFee to the gateway iSend call
      */
     function _send(
         IBridge.SendParams calldata params,
@@ -260,10 +261,11 @@ contract BridgeRouter is IBridge, AccessControlEnumerable, ReentrancyGuard {
 
         string memory destChainId = Strings.toString(params.chainIdTo);
         string memory destinationAddress = Strings.toHexString(uint160(receiverAddress), 20);
-
         bytes memory payload = abi.encode(destinationAddress, params.data);
 
-        IGatewayExtended(gateway).iSend(
+        require(gateway != address(0), "BridgeRouter: gateway not set");
+        uint256 iSendDefaultFee = IGatewayExtended(gateway).iSendDefaultFee();
+        IGatewayExtended(gateway).iSend{value: iSendDefaultFee}(
             routerVersion,
             routerRouteAmount,
             routerRouteRecipient,
