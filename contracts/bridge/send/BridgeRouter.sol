@@ -202,21 +202,22 @@ contract BridgeRouter is IBridge, AccessControlEnumerable, ReentrancyGuard {
     }
 
     /**
-     * @dev Estimates gas fees for cross-chain transfers
+     * @dev Estimates Router Protocol fees for cross-chain transfers
      * @param params The send parameters containing destination and data
      * @param sender The protocol address initiating the transfer
      * @param options_ Additional call options encoded as bytes
-     * @return The estimated gas fee in wei
+     * @return The Router Protocol fee
      * @notice This is a view function that doesn't modify state
-     * @notice Options should be encoded as uint256 for gas fee
+     * @notice Returns only the current iSendDefaultFee from the Gateway contract
      */
     function estimateGasFee(
         IBridge.SendParams calldata params,
         address sender,
         bytes memory options_
     ) public view returns (uint256) {
-        uint256 gasFee = abi.decode(options_, (uint256));
-        return gasFee;
+        require(gateway != address(0), "BridgeRouter: gateway not set");
+        uint256 routerFee = IGatewayExtended(gateway).iSendDefaultFee();
+        return routerFee;
     }
     
     /**
