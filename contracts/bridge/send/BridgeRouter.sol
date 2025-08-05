@@ -7,7 +7,7 @@ import "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "@routerprotocol/evm-gateway-contracts/contracts/IDapp.sol";
-import "@routerprotocol/evm-gateway-contracts/contracts/IGateway.sol";
+import "../../interfaces/IGatewayExtended.sol";
 import "@routerprotocol/evm-gateway-contracts/contracts/Utils.sol";
 import { IGateKeeper } from "../../interfaces/IGateKeeper.sol";
 import "../../interfaces/IBridge.sol";
@@ -121,14 +121,19 @@ contract BridgeRouter is IBridge, AccessControlEnumerable, ReentrancyGuard {
      * @param FeePayer The fee payer identifier string
      * @return The result of the gateway metadata update
      * @notice Only callable by operators
+     * @notice Requires msg.value to cover the Gateway's iSendDefaultFee
      */
     function setDappMetadata(
         string memory FeePayer
     ) public payable onlyRole(OPERATOR_ROLE) returns(uint256) {
         require(bytes(FeePayer).length > 0, "BridgeRouter: empty fee payer");
-        uint256 result = IGateway(gateway).setDappMetadata(FeePayer);
+        require(gateway != address(0), "BridgeRouter: gateway not set");
+        
+        uint256 requiredFee = IGatewayExtended(gateway).iSendDefaultFee();
+        require(msg.value == requiredFee, "BridgeRouter: wrong fee");
+        
+        uint256 result = IGatewayExtended(gateway).setDappMetadata{value: requiredFee}(FeePayer);
         emit DappMetadataSet(FeePayer);
-        return result;
     }
 
     /**
@@ -184,6 +189,16 @@ contract BridgeRouter is IBridge, AccessControlEnumerable, ReentrancyGuard {
     function setState(IBridge.State state_) external onlyRole(OPERATOR_ROLE) {
         state = state_;
         emit StateSet(state);
+    }
+
+    /**
+     * @dev Gets the required fee for setting dApp metadata from the Gateway
+     * @return The required fee in wei for setDappMetadata calls
+     * @notice This is a view function that queries the Gateway's iSendDefaultFee
+     */
+    function getDappMetadataFee() public view returns (uint256) {
+        require(gateway != address(0), "BridgeRouter: gateway not set");
+        return IGatewayExtended(gateway).iSendDefaultFee();
     }
 
     /**
@@ -245,7 +260,7 @@ contract BridgeRouter is IBridge, AccessControlEnumerable, ReentrancyGuard {
         // Encode destination address and data for Router Protocol
         bytes memory payload = abi.encode(destinationAddress, params.data);
 
-        IGateway(gateway).iSend(
+        IGatewayExtended(gateway).iSend(
             routerVersion,
             routerRouteAmount,
             routerRouteRecipient,
