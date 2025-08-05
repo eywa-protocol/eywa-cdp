@@ -15,11 +15,13 @@ contract ExecutorFeeManager is IExecutorFeeManager, AccessControlEnumerable {
     address public priceOracle;
     mapping(bytes32 => uint256) public paidFees;
     mapping(bytes32 => address) public refundTargets;
+    mapping(address => bool) public authorizedRefundTargetSetters;
 
     event PriceOracleSet(address);
     event ExecutorFeePaid(bytes32 requestId, uint64 chainIdTo, bytes options, uint256 fee, address refundTarget);
     event ValueWithdrawn(address to, uint256 amount);
-    event FeeRefunded(bytes32 requestId, address to, uint256 amount);   
+    event FeeRefunded(bytes32 requestId, address to, uint256 amount);
+    event AuthorizedRefundTargetSetterSet(address setter, bool authorized);
 
     constructor() {
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
@@ -30,6 +32,11 @@ contract ExecutorFeeManager is IExecutorFeeManager, AccessControlEnumerable {
     function setPriceOracle(address priceOracle_) external onlyRole(OPERATOR_ROLE) {
         priceOracle = priceOracle_;
         emit PriceOracleSet(priceOracle_);
+    }
+
+    function setAuthorizedRefundTargetSetter(address setter, bool authorized) external onlyRole(OPERATOR_ROLE) {
+        authorizedRefundTargetSetters[setter] = authorized;
+        emit AuthorizedRefundTargetSetterSet(setter, authorized);
     }
 
     function estimateExecutorGasFee(uint64 chainIdTo, bytes memory options) public view returns(uint256) {
@@ -46,11 +53,13 @@ contract ExecutorFeeManager is IExecutorFeeManager, AccessControlEnumerable {
         uint256 fee = estimateExecutorGasFee(chainIdTo, options);
         require(msg.value >= fee, "ExecutorFeeManager: not enough value");
         paidFees[requestId] += msg.value;
+        
         if (refundTargets[requestId] == address(0)) {
             require(refundTarget != address(0), "ExecutorFeeManager: Invalid refund target");
+            require(authorizedRefundTargetSetters[msg.sender], "ExecutorFeeManager: Unauthorized to set refund target");
             refundTargets[requestId] = refundTarget;
         }
-        emit ExecutorFeePaid(requestId, chainIdTo, options, fee, refundTarget);
+        emit ExecutorFeePaid(requestId, chainIdTo, options, fee, refundTargets[requestId]);
     }
 
     function refund(bytes32 requestId, uint256 amount) external onlyRole(EXECUTOR_ROLE) {
