@@ -255,10 +255,12 @@ contract BridgeRouter is IBridge, AccessControlEnumerable, ReentrancyGuard {
         require(state == IBridge.State.Active, "BridgeRouter: state inactive");
         require(gateway != address(0), "BridgeRouter: gateway not set");
 
-        string memory destChainId = Strings.toString(params.chainIdTo);
-        string memory destinationAddress = Strings.toHexString(uint160(uint256(params.to)), 20);
+        address receiverAddress = receivers[params.chainIdTo];
+        require(receiverAddress != address(0), "BridgeRouter: receiver not set for chain");
 
-        // Encode destination address and data for Router Protocol
+        string memory destChainId = Strings.toString(params.chainIdTo);
+        string memory destinationAddress = Strings.toHexString(uint160(receiverAddress), 20);
+
         bytes memory payload = abi.encode(destinationAddress, params.data);
 
         IGatewayExtended(gateway).iSend(
