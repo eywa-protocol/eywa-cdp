@@ -134,6 +134,7 @@ contract BridgeRouter is IBridge, AccessControlEnumerable, ReentrancyGuard {
         
         uint256 result = IGatewayExtended(gateway).setDappMetadata{value: requiredFee}(FeePayer);
         emit DappMetadataSet(FeePayer);
+        return result;
     }
 
     /**
@@ -227,9 +228,10 @@ contract BridgeRouter is IBridge, AccessControlEnumerable, ReentrancyGuard {
      * @param ackGasLimit The acknowledgement gas limit
      * @param ackGasPrice The acknowledgement gas price
      * @param relayerFees The relayer fees
-     * @param ackType The acknowledgement type
+     * @param ackType The acknowledgement type (must be 0 as this contract doesn't implement iAck)
      * @param isReadCall The read call flag
      * @param asmAddress The assembly address
+     * @notice ackType must be 0 since this contract doesn't implement iAck function
      **/
     function getRequestMetadata(
         uint64 destGasLimit,
@@ -252,6 +254,19 @@ contract BridgeRouter is IBridge, AccessControlEnumerable, ReentrancyGuard {
             asmAddress
         );
         return requestMetadata;
+    }
+
+    /**
+     * @dev Validates that the ackType in requestMetadata is zero
+     * @param options The Router Protocol options containing requestMetadata
+     * @return True if ackType is zero, reverts otherwise
+     * @notice This function prevents acknowledgment requests that cannot be handled
+     */
+    function validateAckType(bytes memory options) public pure returns (bool) {
+        // ackType is at position 48: destGasLimit(8) + destGasPrice(8) + ackGasLimit(8) + ackGasPrice(8) + relayerFees(16) = 48 bytes
+        uint8 ackType = uint8(options[48]);
+        require(ackType == 0, "BridgeRouter: non-zero ackType not supported");
+        return true;
     }
     
     /**
@@ -281,6 +296,7 @@ contract BridgeRouter is IBridge, AccessControlEnumerable, ReentrancyGuard {
      * @notice This function handles the actual Router Protocol interaction
      * @notice Reverts if bridge is inactive
      * @notice Forwards the iSendDefaultFee to the gateway iSend call
+     * @notice Validates that ackType is zero to prevent acknowledgment requests
      */
     function _send(
         IBridge.SendParams calldata params,
@@ -289,6 +305,8 @@ contract BridgeRouter is IBridge, AccessControlEnumerable, ReentrancyGuard {
     ) internal {
         require(state == IBridge.State.Active, "BridgeRouter: state inactive");
         require(gateway != address(0), "BridgeRouter: gateway not set");
+
+        validateAckType(options_);
 
         address receiverAddress = receivers[params.chainIdTo];
         require(receiverAddress != address(0), "BridgeRouter: receiver not set for chain");
