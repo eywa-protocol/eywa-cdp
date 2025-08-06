@@ -40,6 +40,9 @@ contract ReceiverRouter is AccessControlEnumerable {
 
     /// @dev Operator role identifier - allows peer configuration
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
+
+    /// @dev Router Protocol gateway contract address
+    address public gateway;
     
     /// @dev Mapping of source chain identifiers to their peer contract addresses
     mapping(string sourceChain => address peer) public peers;
@@ -52,15 +55,24 @@ contract ReceiverRouter is AccessControlEnumerable {
     event PeerSet(string sourceChain, address peer);
 
     /**
+     * @dev Emitted when the gateway address is updated
+     * @param gateway The new gateway contract address
+     */
+    event GatewaySet(address gateway);
+
+    /**
      * @dev Constructor initializes the receiver router
      * @param receiver_ The main receiver contract address
+     * @param gateway_ The Router Protocol gateway contract address
      * @notice The deployer becomes the default admin role holder
-     * @notice Receiver address cannot be zero
+     * @notice Receiver and gateway addresses cannot be zero
      */
-    constructor(address receiver_) {
+    constructor(address receiver_, address gateway_) {
         require(receiver_ != address(0), "ReceiverRouter: zero address");
+        require(gateway_ != address(0), "ReceiverRouter: zero address");
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
         receiver = receiver_;
+        gateway = gateway_;
     }
 
     /**
@@ -73,6 +85,18 @@ contract ReceiverRouter is AccessControlEnumerable {
     function setPeer(string calldata sourceChain_, address peer_) public onlyRole(OPERATOR_ROLE) {
         peers[sourceChain_] = peer_;
         emit PeerSet(sourceChain_, peer_);
+    }
+
+    /**
+     * @dev Updates the Router Protocol gateway address
+     * @param gateway_ The new gateway contract address
+     * @notice Only callable by operators
+     * @notice Gateway address cannot be zero
+     */
+    function setGateway(address gateway_) external onlyRole(OPERATOR_ROLE) {
+        require(gateway_ != address(0), "ReceiverRouter: zero address");
+        gateway = gateway_;
+        emit GatewaySet(gateway_);
     }
 
     /**
@@ -90,6 +114,7 @@ contract ReceiverRouter is AccessControlEnumerable {
         bytes calldata packet,
         string memory srcChainId
     ) external {
+        require(msg.sender == gateway, "ReceiverRouter: only gateway");
         require(peers[srcChainId] == requestSender.toAddress(), "ReceiverRouter: wrong peer");
         bytes32 requestId;
         bytes32 sender;
