@@ -219,6 +219,40 @@ contract BridgeRouter is IBridge, AccessControlEnumerable, ReentrancyGuard {
         uint256 routerFee = IGatewayExtended(gateway).iSendDefaultFee();
         return routerFee;
     }
+
+    /**
+     * @dev Generates request metadata for Router Protocol
+     * @param destGasLimit The destination gas limit
+     * @param destGasPrice The destination gas price
+     * @param ackGasLimit The acknowledgement gas limit
+     * @param ackGasPrice The acknowledgement gas price
+     * @param relayerFees The relayer fees
+     * @param ackType The acknowledgement type
+     * @param isReadCall The read call flag
+     * @param asmAddress The assembly address
+     **/
+    function getRequestMetadata(
+        uint64 destGasLimit,
+        uint64 destGasPrice,
+        uint64 ackGasLimit,
+        uint64 ackGasPrice,
+        uint128 relayerFees,
+        uint8 ackType,
+        bool isReadCall,
+        bytes memory asmAddress
+    ) external pure returns (bytes memory) {
+        bytes memory requestMetadata = abi.encodePacked(
+            destGasLimit,
+            destGasPrice,
+            ackGasLimit,
+            ackGasPrice,
+            relayerFees,
+            ackType,
+            isReadCall,
+            asmAddress
+        );
+        return requestMetadata;
+    }
     
     /**
      * @dev Initiates a cross-chain data transfer via Router Protocol
