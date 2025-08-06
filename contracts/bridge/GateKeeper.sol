@@ -499,7 +499,12 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
                 discounts[msg.sender]
             );
         }
-        uint256 executeFee = IExecutorFeeManager(executors[msg.sender]).estimateExecutorGasFee(chainIdTo, currentOptions[currentOptions.length - 1]);
+        uint256 executeFee = 0;
+        if (isAutoExecutable[msg.sender]) {
+            address executor = executors[msg.sender];
+            require(executor != address(0), "GateKeeper: no executor configured");
+            executeFee = IExecutorFeeManager(executor).estimateExecutorGasFee(chainIdTo, currentOptions[currentOptions.length - 1]);
+        }
         uint256 totalFee = sendFee + executeFee;
         return (totalFee, executeFee);
     }
