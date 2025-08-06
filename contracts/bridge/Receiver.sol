@@ -141,7 +141,7 @@ contract Receiver is IReceiver, AccessControlEnumerable {
     /**
      * @dev Receive hash of data
      * 
-     * @param sender Source sende
+     * @param sender Source sender
      * @param receivedHash Received hash
      */
     function receiveHash(bytes32 sender, uint64 chainIdFrom, bytes32 receivedHash, bytes32 requestId) external onlyRole(RECEIVER_ROLE) {
