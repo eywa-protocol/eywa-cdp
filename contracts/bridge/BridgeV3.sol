@@ -32,6 +32,8 @@ contract BridgeV3 is IBridgeV3, AccessControlEnumerable, Typecast, ReentrancyGua
     address public priceOracle;
     /// @dev human readable version
     string public version;
+    /// @dev human readable tag
+    string public tag;
     /// @dev current state Active\Inactive
     State public state;
     /// @dev received request IDs 
@@ -55,10 +57,11 @@ contract BridgeV3 is IBridgeV3, AccessControlEnumerable, Typecast, ReentrancyGua
     event GasPaid(bytes32 requestId, uint32 gasAmount);
 
 
-    constructor() {
+    constructor(string memory tag_) {
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
         version = "2.2.3";
         state = State.Inactive;
+        tag = tag_;
     }
 
     /**

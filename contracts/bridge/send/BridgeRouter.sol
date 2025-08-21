@@ -62,6 +62,9 @@ contract BridgeRouter is IBridge, AccessControlEnumerable, ReentrancyGuard {
     /// @dev Route recipient address for Router Protocol fees
     string public routerRouteRecipient = "";
 
+    /// @dev human readable tag
+    string public tag;
+
     /**
      * @dev Emitted when the bridge state is changed
      * @param state The new bridge state (Active/Inactive)
@@ -101,11 +104,12 @@ contract BridgeRouter is IBridge, AccessControlEnumerable, ReentrancyGuard {
      * @notice The deployer becomes the default admin role holder
      * @notice Bridge starts in Active state by default
      */
-    constructor(address payable gateway_) {
+    constructor(address payable gateway_, string memory tag_) {
         require(gateway_ != address(0), "BridgeRouter: zero gateway address");
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
         state = IBridge.State.Active;
         gateway = gateway_;
+        tag = tag_;
     }
 
     /**

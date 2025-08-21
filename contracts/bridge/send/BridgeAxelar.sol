@@ -34,16 +34,18 @@ contract BridgeAxelar is AxelarExpressExecutable, IBridge, AccessControlEnumerab
     IAxelarGasService public immutable gasService;
     /// @dev ChainIdAdapter address
     address public chainIdAdapter;
+    /// @dev human readable tag
+    string public tag;
 
     event StateSet(IBridge.State state);
     event NetworkSet(uint64 chainIdTo, string network);
     event ReceiverSet(uint64 chainIdTo, address receiver);
     event ChainIdAdapterSet(address);
 
-    constructor(address gateway_, address gasService_) AxelarExpressExecutable(gateway_) {
+    constructor(address gateway_, address gasService_, string memory tag_) AxelarExpressExecutable(gateway_) {
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
         state = IBridge.State.Active;
-
+        tag = tag_;
         gasService = IAxelarGasService(gasService_);
     }
 

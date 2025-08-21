@@ -28,7 +28,7 @@ contract GovBridgeV2 is BridgeV3 {
     event EpochMinDurationSet(uint256 epochMinDuration);
     event EpochMinRequestUpdateDurationSet(uint256 epochMinRequestUpdateDuration);
 
-    constructor() {
+    constructor(string memory tag_) BridgeV3(tag_) {
         protocolVersion = 1;
         nextProtocolVersion = 1;
         epochMinDuration = 2 hours;

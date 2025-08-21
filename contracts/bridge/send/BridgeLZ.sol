@@ -26,14 +26,17 @@ contract BridgeLZ is OAppSender, IBridge, AccessControlEnumerable, ReentrancyGua
     mapping(address => uint256) public nonces;
     /// @dev ChainIdAdapter address
     address public chainIdAdapter;
+    /// @dev human readable tag
+    string public tag;
 
     event StateSet(IBridge.State state);
     event TreasurySet(address treasury);
     event ChainIdAdapterSet(address);
 
-    constructor(address _endpoint, address _owner) OAppCore(_endpoint, _owner) {
+    constructor(address _endpoint, address _owner, string memory tag_) OAppCore(_endpoint, _owner) {
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
         state = IBridge.State.Active;
+        tag = tag_;
     }
 
     /**
