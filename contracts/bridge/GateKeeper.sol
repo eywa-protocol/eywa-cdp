@@ -464,7 +464,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
      * @param currentOptions Additional options for bridges. 
      *  Params must be sorted by priority
      *  bridge_1 - bridge with priority 1, bridge_2 - bridge with priority 2
-     *  [bridge_1_options, bridge_2_options, bridge_3_options]
+     *  [bridge_1_options, bridge_2_options, bridge_3_options, executor_options, external nonce\salt]
      */
     function estimateGasFee(
         bytes calldata data,
