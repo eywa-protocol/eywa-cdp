@@ -7,7 +7,6 @@ import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableMap.sol";
 import "../interfaces/IReceiver.sol";
-import "../interfaces/IAddressBook.sol";
 
 contract Receiver is IReceiver, AccessControlEnumerable {
 

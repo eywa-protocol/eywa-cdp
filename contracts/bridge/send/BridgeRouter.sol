@@ -9,7 +9,7 @@ import "@openzeppelin/contracts/utils/Strings.sol";
 import "../../interfaces/IGatewayExtended.sol";
 import { IGateKeeper } from "../../interfaces/IGateKeeper.sol";
 import "../../interfaces/IBridge.sol";
-import "../../interfaces/INativeTreasury.sol";
+
 
 /**
  * @title BridgeRouter

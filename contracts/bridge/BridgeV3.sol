@@ -8,13 +8,12 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "../interfaces/IBridgeV3.sol";
 import "../interfaces/IOracle.sol";
 import "../interfaces/IReceiver.sol";
-import "../interfaces/IGateKeeper.sol";
 import "../utils/Block.sol";
 import "../utils/Bls.sol";
 import "../utils/Merkle.sol";
-import "../utils/Typecast.sol";
 
-contract BridgeV3 is IBridgeV3, AccessControlEnumerable, Typecast, ReentrancyGuard {
+
+contract BridgeV3 is IBridgeV3, AccessControlEnumerable, ReentrancyGuard {
     
     using Address for address;
     using Bls for Bls.Epoch;

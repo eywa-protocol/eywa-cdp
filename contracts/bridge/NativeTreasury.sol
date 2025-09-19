@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import "../interfaces/INativeTreasury.sol";
-import "../interfaces/IGateKeeper.sol";
+
 
 contract NativeTreasury is INativeTreasury, Ownable {
     address public immutable gateKeeper;

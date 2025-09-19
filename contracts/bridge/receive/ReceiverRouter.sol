@@ -2,10 +2,8 @@
 // Copyright (c) Eywa.Fi, 2021-2023 - all rights reserved
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/utils/Strings.sol";
 import { StringToAddress } from "@axelar-network/axelar-gmp-sdk-solidity/contracts/libs/AddressString.sol";
 import "../../interfaces/IReceiver.sol";
-import "../../interfaces/IAddressBook.sol";
 import "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
 
 /**

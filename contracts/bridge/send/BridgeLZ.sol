@@ -5,10 +5,9 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import { OAppSender, OAppCore, Origin, MessagingFee } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OApp.sol";
+import { OAppSender, OAppCore, MessagingFee } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OApp.sol";
 import { IGateKeeper } from "../../interfaces/IGateKeeper.sol";
 import "../../interfaces/IBridge.sol";
-import "../../interfaces/INativeTreasury.sol";
 import "../../interfaces/IChainIdAdapter.sol";
 
 

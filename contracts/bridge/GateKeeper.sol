@@ -10,7 +10,6 @@ import "../utils/Typecast.sol";
 import "../utils/RequestIdLib.sol";
 import "../interfaces/IBridge.sol";
 import "../interfaces/IGateKeeper.sol";
-import "../interfaces/IAddressBook.sol";
 import "../interfaces/IValidatedDataReciever.sol";
 import { INativeTreasuryFactory } from '../interfaces/INativeTreasuryFactory.sol';
 import { NativeTreasury } from '../bridge/NativeTreasury.sol';
