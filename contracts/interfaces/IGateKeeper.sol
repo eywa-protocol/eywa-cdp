@@ -25,8 +25,6 @@ interface IGateKeeper {
         bytes[] memory options
     ) external view returns(uint256, uint256);
 
-    function nonces(address protocol) external view returns (uint256 nonce);
-
     function treasuries(address protocol) external view returns (address treasury);
     function bridge() external view returns(address);
 }

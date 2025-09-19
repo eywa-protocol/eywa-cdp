@@ -50,8 +50,6 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     mapping(uint64 => mapping(address => uint256)) public rates;
     /// @dev protocol => discounts, [0, 10000]
     mapping(address => uint256) public discounts;
-    /// @dev nonce for senders
-    mapping(address => uint256) public nonces;
     // @dev bridge => is registered
     mapping(address => bool) public registeredBridges;  
     // @dev protocol => treasury
@@ -60,8 +58,8 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     mapping(bytes32 => address[]) public bridgesByPriority;
     /// @dev protocol -> threshold
     mapping(bytes32 => uint8) public threshold;
-    /// @dev msg.sender -> nonce -> hash of data
-    mapping(address => mapping(uint256 => bytes32)) public sentDataHash;
+    /// @dev requestId -> hash of data
+    mapping(bytes32 => bytes32) public sentDataHash;
     /// @dev msg.sender -> executor
     mapping(address => address) public executors;
     /// @dev auto executable flag
@@ -227,7 +225,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         bool isHash
     ) external payable {
         require(registeredBridges[bridge], "GateKeeper: bridge not registered");
-        require(sentDataHash[protocol][nonce] == keccak256(abi.encode(
+        require(sentDataHash[params.requestId] == keccak256(abi.encode(
             params,
             nonce,
             protocol
@@ -344,7 +342,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
      * @param currentOptions Additional options for bridges and executors. 
      *  Params must be sorted by priority
      *  bridge_1 - bridge with priority 1, bridge_2 - bridge with priority 2
-     *  [bridge_1_options, bridge_2_options, bridge_3_options, executor_options]
+     *  [bridge_1_options, bridge_2_options, bridge_3_options, executor_options, external nonce\salt]
      */
     function sendData(
         bytes calldata data,
@@ -355,7 +353,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         uint256 executeFee;
         (uint256 sendFee, bytes32 requestId) = _sendData(data, to, chainIdTo, currentOptions);
         if (isAutoExecutable[msg.sender]) {
-            executeFee = _payForExecute(requestId, chainIdTo, currentOptions[currentOptions.length - 1]);
+            executeFee = _payForExecute(requestId, chainIdTo, currentOptions[currentOptions.length - 2]);
         }
         return sendFee + executeFee;
     }        
@@ -370,12 +368,12 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         bytes[] memory currentOptions
     ) internal returns(uint256 sendFee, bytes32 requestId) {
         bytes memory out;
-        uint256 nonce;
+        uint256 nonce = abi.decode(currentOptions[currentOptions.length - 1], (uint256));
         bytes memory collectedData;
         {
-            (requestId, nonce, collectedData) = _buildData(to, chainIdTo, data);
-            nonces[msg.sender]++;
-            sentDataHash[msg.sender][nonce] = keccak256(abi.encode(
+            (requestId, collectedData) = _buildData(to, chainIdTo, data, nonce);
+            require(sentDataHash[requestId] == 0, "GateKeeper: requestId already used");
+            sentDataHash[requestId] = keccak256(abi.encode(
                 IBridge.SendParams({
                         requestId: requestId,
                         data: collectedData,
@@ -387,8 +385,9 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
             ));
         }
         address[] memory selectedBridges = selectBridgesByPriority(msg.sender, chainIdTo);
-        
+
         require(selectedBridges.length > 0, "GateKeeper: zero selected bridges");
+        require(selectedBridges.length == (currentOptions.length - 2), "GateKeeper: options incorrect");
         {
             for (uint8 i; i < selectedBridges.length; ++i) {
                 if (i == 0) {
@@ -474,9 +473,9 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         bytes[] memory currentOptions
     ) public view returns (uint256, uint256) {
         bytes32 requestId;
-        uint256 nonce;
+        uint256 nonce = abi.decode(currentOptions[currentOptions.length - 1], (uint256));
         bytes memory collectedData;
-        (requestId, nonce, collectedData) = _buildData(to, chainIdTo, data);
+        (requestId, collectedData) = _buildData(to, chainIdTo, data, nonce);
         address[] memory selectedBridges = selectBridgesByPriority(msg.sender, uint64(chainIdTo));
         bytes memory out;
         uint256 sendFee;
@@ -503,7 +502,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         if (isAutoExecutable[msg.sender]) {
             address executor = executors[msg.sender];
             require(executor != address(0), "GateKeeper: no executor configured");
-            executeFee = IExecutorFeeManager(executor).estimateExecutorGasFee(chainIdTo, currentOptions[currentOptions.length - 1]);
+            executeFee = IExecutorFeeManager(executor).estimateExecutorGasFee(chainIdTo, currentOptions[currentOptions.length - 2]);
         }
         uint256 totalFee = sendFee + executeFee;
         return (totalFee, executeFee);
@@ -516,12 +515,10 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
      * @param chainIdTo chain id to send
      * @param data data to send
      */
-    function _buildData(bytes32 to, uint64 chainIdTo, bytes calldata data) internal view returns(bytes32, uint256, bytes memory) {
+    function _buildData(bytes32 to, uint64 chainIdTo, bytes calldata data, uint256 nonce) internal view returns(bytes32, bytes memory) {
         bytes32 requestId;
-        uint256 nonce;
         bytes memory collectedData;
         {
-            nonce = nonces[msg.sender] + 1;
             requestId = RequestIdLib.prepareRequestId(
                 to,
                 chainIdTo,
@@ -542,7 +539,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
                 to
             );
         }
-        return (requestId, nonce, collectedData);
+        return (requestId, collectedData);
     }
 
     /**
