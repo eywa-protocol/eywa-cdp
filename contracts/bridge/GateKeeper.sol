@@ -41,36 +41,37 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
     /// @dev treasury admin role
     bytes32 public constant TREASURY_ADMIN_ROLE = keccak256("TREASURY_ADMIN_ROLE");
+
     /// @dev receiver contract
     address public receiver;
+    /// @dev bridge => is registered
+    mapping(address => bool) public registeredBridges;  
     /// @dev chainId => bridge => base fees
     mapping(uint64 => mapping(address => uint256)) public baseFees;
     /// @dev chainId => pay token => rate (per byte)
     mapping(uint64 => mapping(address => uint256)) public rates;
-    /// @dev protocol => discounts, [0, 10000]
-    mapping(address => uint256) public discounts;
-    // @dev bridge => is registered
-    mapping(address => bool) public registeredBridges;  
-    // @dev protocol => treasury
+    /// @dev protocol => treasury
     mapping(address => address) public treasuries; 
-    // @dev array of sorted by priorities bridges. Bytes32 = protocol address + chainIdTo
-    mapping(bytes32 => address[]) public bridgesByPriority;
     /// @dev protocol -> threshold
     mapping(bytes32 => uint8) public threshold;
-    /// @dev requestId -> hash of data
-    mapping(bytes32 => bytes32) public sentDataHash;
+    /// @dev array of sorted by priorities bridges. Bytes32 = protocol address + chainIdTo
+    mapping(bytes32 => address[]) public bridgesByPriority;
+    /// @dev protocol => discounts, [0, 10000]
+    mapping(address => uint256) public discounts;
     /// @dev msg.sender -> executor
     mapping(address => address) public executors;
+    /// @dev requestId -> hash of data
+    mapping(bytes32 => bytes32) public sentDataHash;
 
     event ReceiverSet(address receiver);
+    event BridgeRegistered(address bridge, bool status);
     event BaseFeeSet(uint64 chainId, address bridge, uint256 fee);
     event RateSet(uint64 chainId, address bridge, uint256 rate);
-    event DiscountSet(address protocol, uint256 discount);
-    event FeesWithdrawn(address token, uint256 amount, address to);
     event ThresholdSet(address sender, uint64[] chainIds, uint8[] threshold);
-    event ExecutorSet(address protocol, address executor);
-    event BridgeRegistered(address bridge, bool status);
     event BridgesPriorityUpdated(address protocol, uint64[] chainIds, address[][] bridges);
+    event DiscountSet(address protocol, uint256 discount);
+    event ExecutorSet(address protocol, address executor);
+    event FeesWithdrawn(address token, uint256 amount, address to);
     event DataSent(
         address[] selectedBridges, 
         bytes32 requestId, 
@@ -105,20 +106,6 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     receive() external payable { }
 
     /**
-     * @dev Sets the base fee for a given chain ID and token address.
-     * The base fee represents the minimum amount of pay {TOKEN} required as transaction fee.
-     *
-     * @param baseFees_ The array of the BaseFee structs.
-     */
-    function setBaseFee(BaseFee[] memory baseFees_) external onlyRole(OPERATOR_ROLE) {
-        for (uint256 i = 0; i < baseFees_.length; ++i) {
-            BaseFee memory baseFee = baseFees_[i];
-            baseFees[baseFee.chainId][baseFee.bridge] = baseFee.fee;
-            emit BaseFeeSet(baseFee.chainId, baseFee.bridge, baseFee.fee);
-        }
-    }
-
-    /**
      * @notice Sets the address of the Receiver contract.
      *
      * @dev Only the contract admin is allowed to call this function.
@@ -131,23 +118,30 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         emit ReceiverSet(receiver_);
     }
 
-    function setExecutor(address protocol, address executor) external onlyRole(OPERATOR_ROLE) {
-        require(protocol != address(0), "GateKeeper: zero address");
-        require(executor != address(0), "GateKeeper: zero address");
-        executors[protocol] = executor;
-        emit ExecutorSet(protocol, executor);
+    /**
+     * @dev Set bridge registration
+     * 
+     * @param bridge  bridge address
+     * @param status  new status
+     */
+    function updateBridgeRegistration(address bridge, bool status) external onlyRole(OPERATOR_ROLE) {
+        require(bridge != address(0), "GateKeeper: zero address");
+        registeredBridges[bridge] = status;
+        emit BridgeRegistered(bridge, status);
     }
 
     /**
-     * @dev Register protocol, deploy trasury for it
-     * 
-     * @param treasuryAdmin_ admin of treasury, which can withdraw
-     * @param protocol_ Protocol address who will use treasury
+     * @dev Sets the base fee for a given chain ID and token address.
+     * The base fee represents the minimum amount of pay {TOKEN} required as transaction fee.
+     *
+     * @param baseFees_ The array of the BaseFee structs.
      */
-    function registerProtocol(address treasuryAdmin_, address protocol_) external onlyRole(TREASURY_ADMIN_ROLE) {
-        require(treasuries[protocol_] == address(0), "GateKeeper: protocol registered");
-        address treasury = address(new NativeTreasury(treasuryAdmin_));
-        treasuries[protocol_] = treasury;
+    function setBaseFee(BaseFee[] memory baseFees_) external onlyRole(OPERATOR_ROLE) {
+        for (uint256 i = 0; i < baseFees_.length; ++i) {
+            BaseFee memory baseFee = baseFees_[i];
+            baseFees[baseFee.chainId][baseFee.bridge] = baseFee.fee;
+            emit BaseFeeSet(baseFee.chainId, baseFee.bridge, baseFee.fee);
+        }
     }
 
     /**
@@ -165,6 +159,50 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     }
 
     /**
+     * @dev Register protocol, deploy trasury for it
+     * 
+     * @param treasuryAdmin_ admin of treasury, which can withdraw
+     * @param protocol_ Protocol address who will use treasury
+     */
+    function registerProtocol(address treasuryAdmin_, address protocol_) external onlyRole(TREASURY_ADMIN_ROLE) {
+        require(treasuries[protocol_] == address(0), "GateKeeper: protocol registered");
+        address treasury = address(new NativeTreasury(treasuryAdmin_));
+        treasuries[protocol_] = treasury;
+    }
+
+    /**
+     * @dev Sets protocol's threshold. Must be the same on the receiver's side.
+     *
+     * @param protocol The protocol protocol contract address;
+     * @param threshold_ The threshold for the given contract address.
+     */
+    function setThreshold(address protocol, uint64[] memory chainIdTo, uint8[] memory threshold_) external onlyRole(OPERATOR_ROLE) {
+        uint256 length = chainIdTo.length;
+        require(length == threshold_.length, "GateKeeper: wrong lengths");
+        for (uint256 i; i < length; ++i) {
+            require(threshold_[i] >= 1, "GateKeeper: wrong threshold");
+            threshold[_packKey(protocol, chainIdTo[i])] = threshold_[i];
+        }
+        emit ThresholdSet(protocol, chainIdTo, threshold_);
+    }
+
+    /**
+     * @dev Updates bridge priority. 
+     * 
+     * @param protocol_ protocol address
+     * @param chainIds_ List of chainIds for each pair protocol + chainId may be different bridge priority
+     * @param bridges_ sorted by priority array for each chainId. First elem higher priority, then last
+     */
+    function updateBridgesPriority(address protocol_, uint64[] memory chainIds_, address[][] memory bridges_) external onlyRole(OPERATOR_ROLE) {
+        uint256 length = chainIds_.length;
+        require(length == bridges_.length, "GateKeeper: wrong lengths");
+        for (uint256 i; i < length; ++i) {
+            bridgesByPriority[_packKey(protocol_, chainIds_[i])] = bridges_[i];
+        }
+        emit BridgesPriorityUpdated(protocol_, chainIds_, bridges_);
+    }
+
+    /**
      * @dev Sets the discount for a given protocol. Have to be in [0, 10000], where 10000 is 100%.
      *
      * @param protocol The address of the protocol for which the discount is being set;
@@ -177,25 +215,44 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     }
 
     /**
-     * @dev Calculates the cost for a cross-chain operation in the specified token.
+     * @notice Sets the address of the ExecutorFeeManager contract.
      *
-     * @param dataLength The length of the data being transmitted in the cross-chain operation;
-     * @param chainIdTo The ID of the destination chain;
-     * @param discountPersentage The discount for protocol;
-     * @return amountToPay The fee amount to be paid for the cross-chain operation.
+     * @dev Only the contract operator is allowed to call this function.
+     *
+     * @param protocol The address of the protocol
+     * @param executor The address of the executor for protocol
      */
-    function calculateAdditionalFee(
-        uint256 dataLength,
-        uint64 chainIdTo,
-        address bridge,
-        uint256 discountPersentage
-    ) public view returns (uint256 amountToPay) {
-        uint256 baseFee = baseFees[chainIdTo][bridge];
-        uint256 rate = rates[chainIdTo][bridge];
-        require(baseFee != 0, "GateKeeper: base fee not set");
-        require(rate != 0, "GateKeeper: rate not set");
-        (amountToPay) = _getPercentValues(baseFee + (dataLength * rate), discountPersentage);
+    function setExecutor(address protocol, address executor) external onlyRole(OPERATOR_ROLE) {
+        require(protocol != address(0), "GateKeeper: zero address");
+        require(executor != address(0), "GateKeeper: zero address");
+        executors[protocol] = executor;
+        emit ExecutorSet(protocol, executor);
     }
+
+    /**
+     * @dev Sends data to a destination contract
+     *
+     * @param data The data (encoded with selector) which would be send to the destination contract;
+     * @param to The address of the destination contract;
+     * @param chainIdTo The ID of the chain where the destination contract resides;
+     * @param currentOptions Additional options for bridges and executors. 
+     *  Params must be sorted by priority
+     *  bridge_1 - bridge with priority 1, bridge_2 - bridge with priority 2
+     *  [bridge_1_options, bridge_2_options, bridge_3_options, executor_options, external nonce\salt]
+     */
+    function sendData(
+        bytes calldata data,
+        bytes32 to,
+        uint64 chainIdTo,
+        bytes[] memory currentOptions
+    ) external nonReentrant returns(uint256 fee) {
+        uint256 executeFee;
+        (uint256 sendFee, bytes32 requestId) = _sendData(data, to, chainIdTo, currentOptions);
+        if (threshold[_packKey(msg.sender, chainIdTo)] > 1) {
+            executeFee = _payForExecute(requestId, chainIdTo, currentOptions[currentOptions.length - 2]);
+        }
+        return sendFee + executeFee;
+    }        
 
     /**
      * @dev Retry transaction, that was send. Send it only with same params
@@ -281,47 +338,32 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     }
 
     /**
-     * @dev Sets protocol's threshold. Must be the same on the receiver's side.
-     *
-     * @param protocol The protocol protocol contract address;
-     * @param threshold_ The threshold for the given contract address.
+     * @dev Returns the address of the part of the bridge that delivers to the destination chain.
+     * In this case this is receiver contract
+     * NOTE: to support legacy
      */
-    function setThreshold(address protocol, uint64[] memory chainIdTo, uint8[] memory threshold_) external onlyRole(OPERATOR_ROLE) {
-        uint256 length = chainIdTo.length;
-        require(length == threshold_.length, "GateKeeper: wrong lengths");
-        for (uint256 i; i < length; ++i) {
-            require(threshold_[i] >= 1, "GateKeeper: wrong threshold");
-            threshold[_packKey(protocol, chainIdTo[i])] = threshold_[i];
-        }
-        emit ThresholdSet(protocol, chainIdTo, threshold_);
+    function bridge() external view returns(address) {
+        return receiver;
     }
 
     /**
-     * @dev Set bridge registration
+     * @dev Select bridge by priority and by threshold
      * 
-     * @param bridge  bridge address
-     * @param status  new status
+     * @param protocol protocol, which uses bridge
+     * @param chainIdTo chain id to send
      */
-    function updateBridgeRegistration(address bridge, bool status) external onlyRole(OPERATOR_ROLE) {
-        require(bridge != address(0), "GateKeeper: zero address");
-        registeredBridges[bridge] = status;
-        emit BridgeRegistered(bridge, status);
-    }
-
-    /**
-     * @dev Updates bridge priority. 
-     * 
-     * @param protocol_ protocol address
-     * @param chainIds_ List of chainIds for each pair protocol + chainId may be different bridge priority
-     * @param bridges_ sorted by priority array for each chainId. First elem higher priority, then last
-     */
-    function updateBridgesPriority(address protocol_, uint64[] memory chainIds_, address[][] memory bridges_) external onlyRole(OPERATOR_ROLE) {
-        uint256 length = chainIds_.length;
-        require(length == bridges_.length, "GateKeeper: wrong lengths");
-        for (uint256 i; i < length; ++i) {
-            bridgesByPriority[_packKey(protocol_, chainIds_[i])] = bridges_[i];
+    function selectBridgesByPriority(address protocol, uint64 chainIdTo) public view returns(address[] memory) {
+        bytes32 key = _packKey(protocol, chainIdTo);
+        uint8 threshold_ = threshold[key];
+        require(threshold_ > 0, "GateKeeper: zero threshold");
+        require(threshold_ <= bridgesByPriority[key].length, "GateKeeper: not enough bridges");
+        address[] memory selectedBridges = new address[](threshold_);
+        for (uint8 i; i < threshold_; ++i) {
+            address currentBridge = bridgesByPriority[key][i];
+            require(registeredBridges[currentBridge], "GateKeeper: bridge not registered");
+            selectedBridges[i] = currentBridge;
         }
-        emit BridgesPriorityUpdated(protocol_, chainIds_, bridges_);
+        return selectedBridges;
     }
 
     /**
@@ -330,24 +372,73 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
      * @param data The data (encoded with selector) which would be send to the destination contract;
      * @param to The address of the destination contract;
      * @param chainIdTo The ID of the chain where the destination contract resides;
-     * @param currentOptions Additional options for bridges and executors. 
+     * @param currentOptions Additional options for bridges. 
      *  Params must be sorted by priority
      *  bridge_1 - bridge with priority 1, bridge_2 - bridge with priority 2
      *  [bridge_1_options, bridge_2_options, bridge_3_options, executor_options, external nonce\salt]
      */
-    function sendData(
+    function estimateGasFee(
         bytes calldata data,
         bytes32 to,
         uint64 chainIdTo,
         bytes[] memory currentOptions
-    ) external nonReentrant returns(uint256 fee) {
-        uint256 executeFee;
-        (uint256 sendFee, bytes32 requestId) = _sendData(data, to, chainIdTo, currentOptions);
-        if (threshold[_packKey(msg.sender, chainIdTo)] > 1) {
-            executeFee = _payForExecute(requestId, chainIdTo, currentOptions[currentOptions.length - 2]);
+    ) public view returns (uint256, uint256) {
+        bytes32 requestId;
+        uint256 nonce = abi.decode(currentOptions[currentOptions.length - 1], (uint256));
+        bytes memory collectedData;
+        (requestId, collectedData) = _buildData(to, chainIdTo, data, nonce);
+        address[] memory selectedBridges = selectBridgesByPriority(msg.sender, uint64(chainIdTo));
+        bytes memory out;
+        uint256 sendFee;
+        for (uint8 i; i < selectedBridges.length; ++i) {
+            if (i == 0) {
+                out = _encodeOut(collectedData, msg.sender, requestId, false);
+            } else if (i == 1) {
+                out = _encodeOut(collectedData, msg.sender, requestId, true);
+            }
+            sendFee += _quoteCustomBridge(
+                selectedBridges[i], 
+                IBridge.SendParams({
+                        requestId: requestId,
+                        data: out,
+                        to: to,
+                        chainIdTo: chainIdTo
+                }), 
+                msg.sender,
+                currentOptions[i],
+                discounts[msg.sender]
+            );
         }
-        return sendFee + executeFee;
-    }        
+        uint256 executeFee = 0;
+        if (threshold[_packKey(msg.sender, chainIdTo)] > 1) {
+            address executor = executors[msg.sender];
+            require(executor != address(0), "GateKeeper: no executor configured");
+            executeFee = IExecutorFeeManager(executor).estimateExecutorGasFee(chainIdTo, currentOptions[currentOptions.length - 2]);
+        }
+        uint256 totalFee = sendFee + executeFee;
+        return (totalFee, executeFee);
+    }
+
+    /**
+     * @dev Calculates the cost for a cross-chain operation in the specified token.
+     *
+     * @param dataLength The length of the data being transmitted in the cross-chain operation;
+     * @param chainIdTo The ID of the destination chain;
+     * @param discountPersentage The discount for protocol;
+     * @return amountToPay The fee amount to be paid for the cross-chain operation.
+     */
+    function calculateAdditionalFee(
+        uint256 dataLength,
+        uint64 chainIdTo,
+        address bridge,
+        uint256 discountPersentage
+    ) public view returns (uint256 amountToPay) {
+        uint256 baseFee = baseFees[chainIdTo][bridge];
+        uint256 rate = rates[chainIdTo][bridge];
+        require(baseFee != 0, "GateKeeper: base fee not set");
+        require(rate != 0, "GateKeeper: rate not set");
+        (amountToPay) = _getPercentValues(baseFee + (dataLength * rate), discountPersentage);
+    }
 
     /**
      * @dev Sends data to a destination contract
@@ -407,6 +498,42 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         return (sendFee, requestId);
     }
 
+    /**
+     * @dev Send data by custom bridge
+     * 
+     * @param bridge_ bridge address
+     * @param params params to send
+     * @param nonce nonce 
+     * @param protocol protocol address
+     * @param options  additional options for bridge call
+     */
+    function _sendCustomBridge(
+        address bridge_,
+        IBridge.SendParams memory params,
+        uint256 nonce,
+        address protocol,
+        bytes memory options,
+        uint256 discountPersentage
+    ) internal returns(uint256, uint256) {
+        uint256 gasFee;
+        uint256 totalFee;
+        (totalFee, gasFee) = _calculateGasFee(
+            bridge_,
+            params,
+            protocol,
+            options,
+            discountPersentage
+        );
+        INativeTreasury(treasuries[protocol]).getValue(totalFee);
+        IBridge(bridge_).sendV3{value: gasFee}(
+            params,
+            protocol,
+            nonce,
+            options
+        );
+        return (totalFee, gasFee);
+    }
+
     function _payForExecute(bytes32 requestId, uint64 chainIdTo, bytes memory options) internal returns(uint256) {
         address executor = executors[msg.sender];
         address treasury = treasuries[msg.sender];
@@ -415,88 +542,6 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         IExecutorFeeManager(executor).payExecutorGasFee{value: executeGasFee}(requestId, chainIdTo, options, treasury);
         emit ExecutionPaid(requestId, chainIdTo, options, executeGasFee, msg.sender, treasury, executor);
         return executeGasFee;
-    }
-
-    /**
-     * @dev Select bridge by priority and by threshold
-     * 
-     * @param protocol protocol, which uses bridge
-     * @param chainIdTo chain id to send
-     */
-    function selectBridgesByPriority(address protocol, uint64 chainIdTo) public view returns(address[] memory) {
-        bytes32 key = _packKey(protocol, chainIdTo);
-        uint8 threshold_ = threshold[key];
-        require(threshold_ > 0, "GateKeeper: zero threshold");
-        require(threshold_ <= bridgesByPriority[key].length, "GateKeeper: not enough bridges");
-        address[] memory selectedBridges = new address[](threshold_);
-        for (uint8 i; i < threshold_; ++i) {
-            address currentBridge = bridgesByPriority[key][i];
-            require(registeredBridges[currentBridge], "GateKeeper: bridge not registered");
-            selectedBridges[i] = currentBridge;
-        }
-        return selectedBridges;
-    }
-
-    /**
-     * @dev Returns the address of the part of the bridge that delivers to the destination chain.
-     * In this case this is receiver contract
-     * NOTE: to support legacy
-     */
-    function bridge() external view returns(address) {
-        return receiver;
-    }
-
-    /**
-     * @dev Sends data to a destination contract
-     *
-     * @param data The data (encoded with selector) which would be send to the destination contract;
-     * @param to The address of the destination contract;
-     * @param chainIdTo The ID of the chain where the destination contract resides;
-     * @param currentOptions Additional options for bridges. 
-     *  Params must be sorted by priority
-     *  bridge_1 - bridge with priority 1, bridge_2 - bridge with priority 2
-     *  [bridge_1_options, bridge_2_options, bridge_3_options, executor_options, external nonce\salt]
-     */
-    function estimateGasFee(
-        bytes calldata data,
-        bytes32 to,
-        uint64 chainIdTo,
-        bytes[] memory currentOptions
-    ) public view returns (uint256, uint256) {
-        bytes32 requestId;
-        uint256 nonce = abi.decode(currentOptions[currentOptions.length - 1], (uint256));
-        bytes memory collectedData;
-        (requestId, collectedData) = _buildData(to, chainIdTo, data, nonce);
-        address[] memory selectedBridges = selectBridgesByPriority(msg.sender, uint64(chainIdTo));
-        bytes memory out;
-        uint256 sendFee;
-        for (uint8 i; i < selectedBridges.length; ++i) {
-            if (i == 0) {
-                out = _encodeOut(collectedData, msg.sender, requestId, false);
-            } else if (i == 1) {
-                out = _encodeOut(collectedData, msg.sender, requestId, true);
-            }
-            sendFee += _quoteCustomBridge(
-                selectedBridges[i], 
-                IBridge.SendParams({
-                        requestId: requestId,
-                        data: out,
-                        to: to,
-                        chainIdTo: chainIdTo
-                }), 
-                msg.sender,
-                currentOptions[i],
-                discounts[msg.sender]
-            );
-        }
-        uint256 executeFee = 0;
-        if (threshold[_packKey(msg.sender, chainIdTo)] > 1) {
-            address executor = executors[msg.sender];
-            require(executor != address(0), "GateKeeper: no executor configured");
-            executeFee = IExecutorFeeManager(executor).estimateExecutorGasFee(chainIdTo, currentOptions[currentOptions.length - 2]);
-        }
-        uint256 totalFee = sendFee + executeFee;
-        return (totalFee, executeFee);
     }
 
     /**
@@ -565,55 +610,28 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     }
 
     /**
-     * @dev Calculates the final amount to be paid after applying a discount percentage to the original amount.
-     *
-     * @param amount The original amount to be paid;
-     * @param basePercent The percentage of discount to be applied;
-     * @return amountToPay The final amount to be paid after the discount has been applied.
-     */
-    function _getPercentValues(
-        uint256 amount,
-        uint256 basePercent
-    ) private pure returns (uint256 amountToPay) {
-        require(amount >= 10, "GateKeeper: amount is too small");
-        uint256 denominator = 10000;
-        uint256 discount = (amount * basePercent) / denominator;
-        amountToPay = amount - discount;
-    }
-
-    /**
-     * @dev Send data by custom bridge
+     * @dev Calculate fees for send
      * 
      * @param bridge_ bridge address
      * @param params params to send
-     * @param nonce nonce 
      * @param protocol protocol address
      * @param options  additional options for bridge call
+     * @param discountPersentage  discount persentage
      */
-    function _sendCustomBridge(
+    function _calculateGasFee(
         address bridge_,
         IBridge.SendParams memory params,
-        uint256 nonce,
         address protocol,
         bytes memory options,
         uint256 discountPersentage
-    ) internal returns(uint256, uint256) {
-        uint256 gasFee;
-        uint256 totalFee;
-        (totalFee, gasFee) = _calculateGasFee(
-            bridge_,
+    ) internal view returns(uint256, uint256) {
+        uint256 gasFee = IBridge(bridge_).estimateGasFee(
             params,
             protocol,
-            options,
-            discountPersentage
-        );
-        INativeTreasury(treasuries[protocol]).getValue(totalFee);
-        IBridge(bridge_).sendV3{value: gasFee}(
-            params,
-            protocol,
-            nonce,
             options
         );
+        uint256 additionalFee = calculateAdditionalFee(params.data.length, uint64(params.chainIdTo), bridge_, discountPersentage);
+        uint256 totalFee = gasFee + additionalFee;
         return (totalFee, gasFee);
     }
 
@@ -644,29 +662,20 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     }
 
     /**
-     * @dev Calculate fees for send
-     * 
-     * @param bridge_ bridge address
-     * @param params params to send
-     * @param protocol protocol address
-     * @param options  additional options for bridge call
-     * @param discountPersentage  discount persentage
+     * @dev Calculates the final amount to be paid after applying a discount percentage to the original amount.
+     *
+     * @param amount The original amount to be paid;
+     * @param basePercent The percentage of discount to be applied;
+     * @return amountToPay The final amount to be paid after the discount has been applied.
      */
-    function _calculateGasFee(
-        address bridge_,
-        IBridge.SendParams memory params,
-        address protocol,
-        bytes memory options,
-        uint256 discountPersentage
-    ) internal view returns(uint256, uint256) {
-        uint256 gasFee = IBridge(bridge_).estimateGasFee(
-            params,
-            protocol,
-            options
-        );
-        uint256 additionalFee = calculateAdditionalFee(params.data.length, uint64(params.chainIdTo), bridge_, discountPersentage);
-        uint256 totalFee = gasFee + additionalFee;
-        return (totalFee, gasFee);
+    function _getPercentValues(
+        uint256 amount,
+        uint256 basePercent
+    ) private pure returns (uint256 amountToPay) {
+        require(amount >= 10, "GateKeeper: amount is too small");
+        uint256 denominator = 10000;
+        uint256 discount = (amount * basePercent) / denominator;
+        amountToPay = amount - discount;
     }
 
     /**
