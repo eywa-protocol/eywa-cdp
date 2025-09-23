@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-// Copyright (c) Eywa.Fi, 2021-2024 - all rights reserved
+// Copyright (c) Eywa.Fi, 2021-2025 - all rights reserved
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
@@ -29,15 +29,11 @@ contract Receiver is IReceiver, AccessControlEnumerable {
     mapping(bytes32 => bool) public executedData;
     /// @dev receivers count
     uint8 public receiversCount;
-    /// @dev auto executable flag
-    mapping(bytes32 => bool) public isAutoExecutable;
-
 
     event ThresholdSet(bytes32[] sender, uint64[] chainIdFrom, uint8[] threshold);
     event ReceiverCountSet(uint8 receiverCount);
     event RequestExecuted(bytes32 requestId);
     event Received(address receiver, bytes32 requestId, bool isHash);
-    event AutoExecutableSet(bytes32 sender, bool isAutoExecutable);
 
     constructor() {
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
@@ -80,11 +76,6 @@ contract Receiver is IReceiver, AccessControlEnumerable {
         emit ReceiverCountSet(receiversCount_);
     }
 
-    function setAutoExecutableStatus(bytes32 sender, bool isAutoExecutable_) external onlyRole(OPERATOR_ROLE) {
-        isAutoExecutable[sender] = isAutoExecutable_;
-        emit AutoExecutableSet(sender, isAutoExecutable_);
-    }
-
     /**
      * @notice Get threshold for given address.
      *
@@ -119,16 +110,15 @@ contract Receiver is IReceiver, AccessControlEnumerable {
     function receiveData(bytes32 sender, uint64 chainIdFrom, bytes memory receivedData, bytes32 requestId) external onlyRole(RECEIVER_ROLE) {
         uint8 threshold_ = getThreshold(sender, chainIdFrom);
         require(threshold_ > 0, "Receiver: threshold is not set");
-        bytes32 hashKey = _generateHashKey(keccak256(receivedData), sender, requestId);
 
+        bytes32 hashKey = _generateHashKey(keccak256(receivedData), sender, requestId);
         if(!_receivesCount[hashKey].contains(msg.sender)) {
             _receivesCount[hashKey].add(msg.sender);
         }
 
-        uint256 currentThreshold = _receivesCount[hashKey].length();
         uint256 targetThreshold = getThreshold(sender, chainIdFrom);
-
-        if(isAutoExecutable[sender] && currentThreshold >= targetThreshold) {
+        if(targetThreshold == 1) {
+            uint256 currentThreshold = _receivesCount[hashKey].length();
             _execute(currentThreshold, targetThreshold, receivedData, hashKey, requestId);  
         } else {
             if (payload[hashKey].length == 0) {
@@ -150,14 +140,6 @@ contract Receiver is IReceiver, AccessControlEnumerable {
         bytes32 hashKey = _generateHashKey(receivedHash, sender, requestId);
         require(!_receivesCount[hashKey].contains(msg.sender), "Receiver: already received");
         _receivesCount[hashKey].add(msg.sender);
-
-        if(isAutoExecutable[sender]) {
-            uint256 currentThreshold = _receivesCount[hashKey].length();
-            uint256 targetThreshold = getThreshold(sender, chainIdFrom);
-            if (currentThreshold >= targetThreshold && payload[hashKey].length != 0) {
-                _execute(currentThreshold, targetThreshold, payload[hashKey], hashKey, requestId);
-            }
-        }
         emit Received(msg.sender, requestId, true);
     }
 

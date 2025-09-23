@@ -62,8 +62,6 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     mapping(bytes32 => bytes32) public sentDataHash;
     /// @dev msg.sender -> executor
     mapping(address => address) public executors;
-    /// @dev auto executable flag
-    mapping(address => bool) public isAutoExecutable;
 
     event ReceiverSet(address receiver);
     event BaseFeeSet(uint64 chainId, address bridge, uint256 fee);
@@ -72,7 +70,6 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     event FeesWithdrawn(address token, uint256 amount, address to);
     event ThresholdSet(address sender, uint64[] chainIds, uint8[] threshold);
     event ExecutorSet(address protocol, address executor);
-    event AutoExecutableSet(address sender, bool isAutoExecutable);
     event BridgeRegistered(address bridge, bool status);
     event BridgesPriorityUpdated(address protocol, uint64[] chainIds, address[][] bridges);
     event DataSent(
@@ -140,11 +137,6 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
         require(executor != address(0), "GateKeeper: zero address");
         executors[protocol] = executor;
         emit ExecutorSet(protocol, executor);
-    }
-
-    function setAutoExecutableStatus(address sender, bool isAutoExecutable_) external onlyRole(OPERATOR_ROLE) {
-        isAutoExecutable[sender] = isAutoExecutable_;
-        emit AutoExecutableSet(sender, isAutoExecutable_);
     }
 
     /**
@@ -352,7 +344,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     ) external nonReentrant returns(uint256 fee) {
         uint256 executeFee;
         (uint256 sendFee, bytes32 requestId) = _sendData(data, to, chainIdTo, currentOptions);
-        if (isAutoExecutable[msg.sender]) {
+        if (threshold[_packKey(msg.sender, chainIdTo)] > 1) {
             executeFee = _payForExecute(requestId, chainIdTo, currentOptions[currentOptions.length - 2]);
         }
         return sendFee + executeFee;
@@ -499,7 +491,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
             );
         }
         uint256 executeFee = 0;
-        if (isAutoExecutable[msg.sender]) {
+        if (threshold[_packKey(msg.sender, chainIdTo)] > 1) {
             address executor = executors[msg.sender];
             require(executor != address(0), "GateKeeper: no executor configured");
             executeFee = IExecutorFeeManager(executor).estimateExecutorGasFee(chainIdTo, currentOptions[currentOptions.length - 2]);
