@@ -37,7 +37,7 @@ contract BridgeV3 is IBridgeV3, AccessControlEnumerable, Typecast, ReentrancyGua
     /// @dev current state Active\Inactive
     State public state;
     /// @dev received request IDs 
-    mapping(uint32 epochNum => mapping(bytes32 => bool)) public requestIdChecker;
+    mapping(bytes32 => bool) public requestIdChecker;
     // current epoch
     Bls.Epoch internal currentEpoch;
     // previous epoch
@@ -210,33 +210,23 @@ contract BridgeV3 is IBridgeV3, AccessControlEnumerable, Typecast, ReentrancyGua
             (bytes32 requestId, bytes memory receivedData, address to, uint64 chainIdTo) = Block.decodeRequest(payload);
             require(chainIdTo == block.chainid, "Bridge: wrong chain id");
 
-            bool isRequestIdReceived;
-            if (epochHash == currentEpoch.epochHash) {
-                isRequestIdReceived = requestIdChecker[currentEpoch.epochNum][requestId];
-                requestIdChecker[currentEpoch.epochNum][requestId] = true;
-            } else {
-                isRequestIdReceived = requestIdChecker[previousEpoch.epochNum][requestId];
-                requestIdChecker[previousEpoch.epochNum][requestId] = true;
-            }
+            require(requestIdChecker[requestId] == false, "Bridge: request id already seen");
+            requestIdChecker[requestId] = true;
 
-            if (!isRequestIdReceived) {
-                uint256 length = receivedData.length - 1;
-                payload = new bytes(length);
-                for (uint i; i < length; ++i) {
-                    payload[i] = receivedData[i];
-                }
-                if (receivedData[receivedData.length - 1] == 0x01){
-                    require(payload.length == 128, "Bridge: Invalid message length");
-                    (bytes32 payload_, bytes32 sender, uint256 chainIdFrom, ) = abi.decode(receivedData, (bytes32, bytes32, uint256, bytes32));
-                    IReceiver(receiver).receiveHash(sender, uint64(chainIdFrom), payload_, requestId);
-                } else if (receivedData[receivedData.length - 1] == 0x00) {
-                    (bytes memory payload_, bytes32 sender, uint256 chainIdFrom, ) = abi.decode(receivedData, (bytes, bytes32, uint256, bytes32));
-                    IReceiver(receiver).receiveData(sender, uint64(chainIdFrom), payload_, requestId);
-                } else {
-                    revert("Bridge: wrong message");
-                }
+            uint256 length = receivedData.length - 1;
+            payload = new bytes(length);
+            for (uint j; j < length; ++j) {
+                payload[j] = receivedData[j];
+            }
+            if (receivedData[receivedData.length - 1] == 0x01){
+                require(payload.length == 128, "Bridge: Invalid message length");
+                (bytes32 payload_, bytes32 sender, uint256 chainIdFrom, ) = abi.decode(receivedData, (bytes32, bytes32, uint256, bytes32));
+                IReceiver(receiver).receiveHash(sender, uint64(chainIdFrom), payload_, requestId);
+            } else if (receivedData[receivedData.length - 1] == 0x00) {
+                (bytes memory payload_, bytes32 sender, uint256 chainIdFrom, ) = abi.decode(receivedData, (bytes, bytes32, uint256, bytes32));
+                IReceiver(receiver).receiveData(sender, uint64(chainIdFrom), payload_, requestId);
             } else {
-                revert("Bridge: request id already seen");
+                revert("Bridge: wrong message");
             }
         }
         return true;
