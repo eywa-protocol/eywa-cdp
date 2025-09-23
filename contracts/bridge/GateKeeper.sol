@@ -2,22 +2,22 @@
 // Copyright (c) Eywa.Fi, 2021-2025 - all rights reserved
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
-import "@openzeppelin/contracts/utils/Address.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "../utils/Typecast.sol";
-import "../utils/RequestIdLib.sol";
-import "../interfaces/IBridge.sol";
-import "../interfaces/IGateKeeper.sol";
-import "../interfaces/IValidatedDataReciever.sol";
-import { INativeTreasuryFactory } from '../interfaces/INativeTreasuryFactory.sol';
-import { NativeTreasury } from '../bridge/NativeTreasury.sol';
-import { INativeTreasury } from  "../interfaces/INativeTreasury.sol";
+import { ReentrancyGuard } from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import { AccessControlEnumerable } from "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
+import { IERC20, SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+
+import { IGateKeeper } from "../interfaces/IGateKeeper.sol";
+import { IBridge } from "../interfaces/IBridge.sol";
 import { IExecutorFeeManager } from "../interfaces/IExecutorFeeManager.sol";
+import { IValidatedDataReciever } from "../interfaces/IValidatedDataReciever.sol";
+import { INativeTreasuryFactory } from '../interfaces/INativeTreasuryFactory.sol';
+import { INativeTreasury } from  "../interfaces/INativeTreasury.sol";
+import { NativeTreasury } from './NativeTreasury.sol';
+import { Typecast } from "../utils/Typecast.sol";
+import { RequestIdLib } from "../utils/RequestIdLib.sol";
+
 
 contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, ReentrancyGuard {
-    using Address for address;
 
     struct BaseFee {
         /// @dev chainId The ID of the chain for which the base fee is being set
