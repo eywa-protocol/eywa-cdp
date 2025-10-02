@@ -28,13 +28,15 @@ contract EywaDVN is ILayerZeroDVN, AccessControlEnumerable {
     uint256 internal constant PACKET_HEADER_SIZE = 81;
     /// @dev list of DVNs on other chains
     mapping(uint64 => bytes32) public DVN;
+    /// @dev list of nonces on sender
+    mapping(address => uint256) public nonces;
     /// @dev receive lib address
     address public receiveLib;
     /// @dev options for send
     bytes[] public options;
 
     event BridgeSet(address);
-    event ReceiverSet(uint64 chainId, bytes32 receiver);
+    event DVNSet(uint64 chainId, bytes32 receiver);
     event ChainIdAdapterSet(address);
     event ReceiveLibSet(address);
     event OptionsSet(bytes[]);
@@ -85,7 +87,7 @@ contract EywaDVN is ILayerZeroDVN, AccessControlEnumerable {
         require(length == DVNs.length, "EywaDVN: wrong length");
         for (uint32 i; i < length; ++i) {
             DVN[chainIds_[i]] = DVNs[i];
-            emit ReceiverSet(chainIds_[i], DVN[i]);
+            emit DVNSet(chainIds_[i], DVN[i]);
         }
     }
 
@@ -108,32 +110,14 @@ contract EywaDVN is ILayerZeroDVN, AccessControlEnumerable {
      */
     function assignJob(AssignJobParam calldata param_, bytes calldata LZoptions_) external payable onlyRole(SENDLIB_ROLE) returns (uint256 fee) {
         (bytes memory data, bytes32 DVN_, uint64 chainIdTo) = _prepareCallData(param_.dstEid, param_.packetHeader, param_.payloadHash);
-        fee = IGateKeeper(gateKeeper).sendData(data, DVN_, chainIdTo, options);
-    }
-
-    /**
-     * @dev Estimate job from LZ bridge.
-     * 
-     * @param _dstEid dst eid
-     * @param _confirmations count of confirmations (not used)
-     * @param _sender sender address (not used)
-     * @param _options additional options (not used)
-     */
-    function getFee(
-        uint32 _dstEid,
-        uint64 _confirmations,
-        address _sender,
-        bytes calldata _options
-    ) external view returns (uint256 fee) {
-        bytes memory packetHeader = new bytes(PACKET_HEADER_SIZE);
-        bytes32 payloadHash;
-        (bytes memory data, bytes32 DVN_, uint64 chainIdTo) = _prepareCallData(_dstEid, packetHeader, payloadHash);
-        (fee, ) = IGateKeeper(gateKeeper).estimateGasFee(
-            data,
-            DVN_,
-            chainIdTo,
-            options
-        );
+        uint256 optionsLength = options.length;
+        bytes[] memory currentOptions = new bytes[](optionsLength + 1);
+        for (uint256 i; i < optionsLength; i++) {
+            currentOptions[i] = options[i];
+        }
+        currentOptions[optionsLength] = abi.encode(nonces[msg.sender]);
+        nonces[msg.sender]++;
+        fee = IGateKeeper(gateKeeper).sendData(data, DVN_, chainIdTo, currentOptions);
     }
 
     /**
@@ -163,14 +147,48 @@ contract EywaDVN is ILayerZeroDVN, AccessControlEnumerable {
     }
 
     /**
+     * @dev Get options for cross-chain call.
+     * 
+     * @return options additional options for bridges
+     */
+    function getOptions() external view returns(bytes[] memory) {
+        return options;
+    }
+
+    /**
+     * @dev Estimate job from LZ bridge.
+     * 
+     * @param _dstEid dst eid
+     * @param _confirmations count of confirmations (not used)
+     * @param _sender sender address (not used)
+     * @param _options additional options (not used)
+     */
+    function getFee(
+        uint32 _dstEid,
+        uint64 _confirmations,
+        address _sender,
+        bytes calldata _options
+    ) external view returns (uint256 fee) {
+        bytes memory packetHeader = new bytes(PACKET_HEADER_SIZE);
+        bytes32 payloadHash;
+        (bytes memory data, bytes32 DVN_, uint64 chainIdTo) = _prepareCallData(_dstEid, packetHeader, payloadHash);
+        (fee, ) = IGateKeeper(gateKeeper).estimateGasFee(
+            data,
+            DVN_,
+            chainIdTo,
+            options
+        );
+    }
+
+    /**
      * @dev Validate sender and selector.
      * 
      * @param selector selector
      * @param from from address
      * @param chainIdFrom chain id from
      */
-    function receiveValidatedData(bytes4 selector, address from, uint64 chainIdFrom) external onlyRole(RECEIVER_ROLE) returns (bool) {
-        address DVN_ = address(uint160(uint256(DVN[chainIdFrom])));
+    function receiveValidatedData(bytes4 selector, bytes32 from, uint64 chainIdFrom) external view onlyRole(RECEIVER_ROLE) returns (bool) {
+        bytes32 DVN_ = DVN[chainIdFrom];
         require(from == DVN_, "EywaDVN: wrong sender");
         require(selector == EywaDVN.verify.selector, "EywaDVN: wrong selector");
         return true;
