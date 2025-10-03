@@ -41,8 +41,8 @@ contract LayerZeroOracle is IOracle, AccessControlEnumerable {
         uint256 gasExecute
     ) external view returns (uint256 fee, uint256 priceRatio) {
         uint32 dstEid = IChainIdAdapter(chainIdAdapter).chainIdToDstEid(chainIdTo);
-        (fee, priceRatio) = ILayerZeroPriceFeed(priceFeed).estimateFeeByChain(
-            uint16(dstEid), 
+        (fee, priceRatio, ,) = ILayerZeroPriceFeed(priceFeed).estimateFeeByEid(
+            dstEid, 
             callDataLength, 
             gasExecute
         );
