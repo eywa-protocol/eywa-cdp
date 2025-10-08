@@ -41,9 +41,15 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
     /// @dev treasury admin role
     bytes32 public constant TREASURY_ADMIN_ROLE = keccak256("TREASURY_ADMIN_ROLE");
+    /// @dev max discount for additional fee
+    uint256 public constant MAX_DISCOUNT = 10000;
 
     /// @dev receiver contract
     address public receiver;
+    /// @dev bridge Eywa contract
+    address public bridgeEywa;
+    /// @dev treasury address
+    address public treasury;
     /// @dev bridge => is registered
     mapping(address => bool) public registeredBridges;  
     /// @dev chainId => bridge => base fees
@@ -64,6 +70,8 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     mapping(bytes32 => bytes32) public sentDataHash;
 
     event ReceiverSet(address receiver);
+    event BridgeEywaSet(address bridgeEywa);
+    event TreasurySet(address treasury);
     event BridgeRegistered(address bridge, bool status);
     event BaseFeeSet(uint64 chainId, address bridge, uint256 fee);
     event RateSet(uint64 chainId, address bridge, uint256 rate);
@@ -119,6 +127,32 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
     }
 
     /**
+     * @notice Sets the address of the Eywa BridgeV3 contract.
+     *
+     * @dev Only the contract admin is allowed to call this function.
+     *
+     * @param bridgeEywa_ the address of the new Eywa BridgeV3 contract to be set.
+     */
+    function setBridgeEywa(address bridgeEywa_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(bridgeEywa_ != address(0), "GateKeeper: zero address");
+        bridgeEywa = bridgeEywa_;
+        emit BridgeEywaSet(bridgeEywa_);
+    }
+
+    /**
+     * @notice Sets the address of the treasury contract.
+     *
+     * @dev Only the contract owner is allowed to call this function.
+     *
+     * @param treasury_ the address of the new BridgeV2 contract to be set.
+     */
+    function setTreasury(address treasury_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(treasury_ != address(0), "GateKeeper: zero address");
+        treasury = treasury_;
+        emit TreasurySet(treasury_);
+    }
+
+    /**
      * @dev Set bridge registration
      * 
      * @param bridge  bridge address
@@ -166,8 +200,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
      */
     function registerProtocol(address treasuryAdmin_, address protocol_) external onlyRole(TREASURY_ADMIN_ROLE) {
         require(treasuries[protocol_] == address(0), "GateKeeper: protocol registered");
-        address treasury = address(new NativeTreasury(treasuryAdmin_));
-        treasuries[protocol_] = treasury;
+        treasuries[protocol_] = address(new NativeTreasury(treasuryAdmin_));
     }
 
     /**
@@ -209,7 +242,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
      * @param discount The discount being set.
      */
     function setDiscount(address protocol, uint256 discount) external onlyRole(OPERATOR_ROLE) {
-        require(discount <= 10000, "GateKeeper: wrong discount");
+        require(discount <= MAX_DISCOUNT, "GateKeeper: wrong discount");
         discounts[protocol] = discount;
         emit DiscountSet(protocol, discount);
     }
@@ -325,16 +358,15 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
      *
      * @param token The token address from which the fees need to be withdrawn;
      * @param amount The amount of fees to be withdrawn;
-     * @param to The address where the fees will be transferred.
      */
-    function withdrawFees(address token, uint256 amount, address to) external onlyRole(OPERATOR_ROLE) nonReentrant {
+    function withdrawFees(address token, uint256 amount) external nonReentrant {
         if (token == address(0)) {
-            (bool sent,) = to.call{value: amount}("");
+            (bool sent,) = treasury.call{value: amount}("");
             require(sent, "GateKeeper: failed to send Ether");
         } else {
-            SafeERC20.safeTransfer(IERC20(token), to, amount);
+            SafeERC20.safeTransfer(IERC20(token), treasury, amount);
         }
-        emit FeesWithdrawn(token, amount, to);
+        emit FeesWithdrawn(token, amount, treasury);
     }
 
     /**
@@ -425,19 +457,24 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
      * @param dataLength The length of the data being transmitted in the cross-chain operation;
      * @param chainIdTo The ID of the destination chain;
      * @param discountPersentage The discount for protocol;
-     * @return amountToPay The fee amount to be paid for the cross-chain operation.
+     * @param bridge The use bridge;
+     * @return additionalFee The fee amount to be paid for the cross-chain operation.
      */
     function calculateAdditionalFee(
         uint256 dataLength,
         uint64 chainIdTo,
         address bridge,
         uint256 discountPersentage
-    ) public view returns (uint256 amountToPay) {
-        uint256 baseFee = baseFees[chainIdTo][bridge];
-        uint256 rate = rates[chainIdTo][bridge];
-        require(baseFee != 0, "GateKeeper: base fee not set");
-        require(rate != 0, "GateKeeper: rate not set");
-        (amountToPay) = _getPercentValues(baseFee + (dataLength * rate), discountPersentage);
+    ) public view returns (uint256 additionalFee) {
+        if (bridge == bridgeEywa && discountPersentage < MAX_DISCOUNT) {
+            uint256 baseFee = baseFees[chainIdTo][bridge];
+            uint256 rate = rates[chainIdTo][bridge];
+            require(baseFee != 0, "GateKeeper: base fee not set");
+            require(rate != 0, "GateKeeper: rate not set");
+            additionalFee = baseFee + (dataLength * rate);
+            require(additionalFee >= 10, "GateKeeper: additionalFee is too small");
+            additionalFee -= additionalFee * discountPersentage / MAX_DISCOUNT;
+        }
     }
 
     /**
@@ -525,7 +562,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
             discountPersentage
         );
         INativeTreasury(treasuries[protocol]).getValue(totalFee);
-        IBridge(bridge_).sendV3{value: gasFee}(
+        IBridge(bridge_).sendV3{value: bridge_ == bridgeEywa ? 0 : gasFee}(
             params,
             protocol,
             nonce,
@@ -630,8 +667,10 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
             protocol,
             options
         );
-        uint256 additionalFee = calculateAdditionalFee(params.data.length, uint64(params.chainIdTo), bridge_, discountPersentage);
-        uint256 totalFee = gasFee + additionalFee;
+        uint256 totalFee = gasFee;
+        if (bridge_ == bridgeEywa) {
+            totalFee += calculateAdditionalFee(params.data.length, uint64(params.chainIdTo), bridge_, discountPersentage);
+        }
         return (totalFee, gasFee);
     }
 
@@ -659,23 +698,6 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
             discountPersentage
         );
         return totalFee;
-    }
-
-    /**
-     * @dev Calculates the final amount to be paid after applying a discount percentage to the original amount.
-     *
-     * @param amount The original amount to be paid;
-     * @param basePercent The percentage of discount to be applied;
-     * @return amountToPay The final amount to be paid after the discount has been applied.
-     */
-    function _getPercentValues(
-        uint256 amount,
-        uint256 basePercent
-    ) private pure returns (uint256 amountToPay) {
-        require(amount >= 10, "GateKeeper: amount is too small");
-        uint256 denominator = 10000;
-        uint256 discount = (amount * basePercent) / denominator;
-        amountToPay = amount - discount;
     }
 
     /**
