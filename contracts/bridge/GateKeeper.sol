@@ -360,6 +360,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
      * @param amount The amount of fees to be withdrawn;
      */
     function withdrawFees(address token, uint256 amount) external nonReentrant {
+        require(treasury != address(0), "GateKeeper: treasury not set");
         if (token == address(0)) {
             (bool sent,) = treasury.call{value: amount}("");
             require(sent, "GateKeeper: failed to send Ether");
