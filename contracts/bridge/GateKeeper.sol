@@ -9,7 +9,7 @@ import { IERC20, SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/Saf
 import { IGateKeeper } from "../interfaces/IGateKeeper.sol";
 import { IBridge } from "../interfaces/IBridge.sol";
 import { IExecutorFeeManager } from "../interfaces/IExecutorFeeManager.sol";
-import { IValidatedDataReciever } from "../interfaces/IValidatedDataReciever.sol";
+import { IValidatedDataReceiver } from "../interfaces/IValidatedDataReceiver.sol";
 import { INativeTreasuryFactory } from '../interfaces/INativeTreasuryFactory.sol';
 import { INativeTreasury } from  "../interfaces/INativeTreasury.sol";
 import { NativeTreasury } from './NativeTreasury.sol';
@@ -601,7 +601,7 @@ contract GateKeeper is IGateKeeper, AccessControlEnumerable, Typecast, Reentranc
                 nonce
             );
             bytes memory info = abi.encodeWithSelector(
-                IValidatedDataReciever.receiveValidatedData.selector,
+                IValidatedDataReceiver.receiveValidatedData.selector,
                 bytes4(data[:4]),
                 castToBytes32(msg.sender),
                 block.chainid

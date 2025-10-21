@@ -3,7 +3,7 @@
 pragma solidity ^0.8.20;
 
 
-interface IValidatedDataReciever {
+interface IValidatedDataReceiver {
 
     /**
      * @notice Function which will be called by desination bridge.

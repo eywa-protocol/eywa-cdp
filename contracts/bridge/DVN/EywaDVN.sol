@@ -3,14 +3,17 @@
 
 pragma solidity ^0.8.17;
 
+import { AccessControlEnumerable } from "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
+
 import { ILayerZeroDVN } from "../../interfaces/ILayerZeroDVN.sol";
+import { IValidatedDataReceiver } from "../../interfaces/IValidatedDataReceiver.sol";
 import { ISendLib } from "../../interfaces/ISendLib.sol";
 import { IGateKeeper } from "../../interfaces/IGateKeeper.sol";
 import { IChainIdAdapter } from "../../interfaces/IChainIdAdapter.sol";
 import { IReceiveUln } from "../../interfaces/IReceiveUln.sol";
-import "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
 
-contract EywaDVN is ILayerZeroDVN, AccessControlEnumerable {
+
+contract EywaDVN is ILayerZeroDVN, IValidatedDataReceiver, AccessControlEnumerable {
     
     /// @dev GateKeeper address
     address public gateKeeper;
