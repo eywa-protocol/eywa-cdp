@@ -110,12 +110,8 @@ contract EywaDVN is ILayerZeroDVN, AccessControlEnumerable {
      */
     function assignJob(AssignJobParam calldata param_, bytes calldata LZoptions_) external payable onlyRole(SENDLIB_ROLE) returns (uint256 fee) {
         (bytes memory data, bytes32 DVN_, uint64 chainIdTo) = _prepareCallData(param_.dstEid, param_.packetHeader, param_.payloadHash);
-        uint256 optionsLength = options.length;
-        bytes[] memory currentOptions = new bytes[](optionsLength + 1);
-        for (uint256 i; i < optionsLength; i++) {
-            currentOptions[i] = options[i];
-        }
-        currentOptions[optionsLength] = abi.encode(nonces[msg.sender]);
+        bytes[] memory currentOptions = options;
+        currentOptions[currentOptions.length - 1] = abi.encode(nonces[msg.sender]);
         nonces[msg.sender]++;
         fee = IGateKeeper(gateKeeper).sendData(data, DVN_, chainIdTo, currentOptions);
     }
