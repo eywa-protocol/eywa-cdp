@@ -1,0 +1,12 @@
+// SPDX-License-Identifier: UNLICENSED
+// Copyright (c) Eywa.Fi, 2021-2024 - all rights reserved
+pragma solidity ^0.8.20;
+
+
+interface INativeTreasuryFactory {
+
+    function createNativeTreasury(
+        address admin
+    ) external returns (address); 
+
+}

@@ -2,10 +2,10 @@
 // Copyright (c) Eywa.Fi, 2021-2023 - all rights reserved
 pragma solidity ^0.8.17;
 
-import "./IBridgeV2.sol";
+import "./IBridgeV3.sol";
 
 
-interface IGovBridgeV2 is IBridgeV2 {
+interface IGovBridgeV2 is IBridgeV3 {
 
     /**
      * @dev Request to update epoch. Anyone may call it after epochMinDuration passed.

@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: UNLICENSED
-// Copyright (c) Eywa.Fi, 2021-2023 - all rights reserved
-pragma solidity ^0.8.17;
+// Copyright (c) Eywa.Fi, 2021-2025 - all rights reserved
+pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "../interfaces/IBridgeV2.sol";
+import "../interfaces/IBridgeV3.sol";
+import "../interfaces/IOracle.sol";
+import "../interfaces/IReceiver.sol";
 import "../utils/Block.sol";
 import "../utils/Bls.sol";
 import "../utils/Merkle.sol";
-import "../utils/RequestIdChecker.sol";
-import "../utils/Typecast.sol";
 
 
-contract BridgeV2 is IBridgeV2, AccessControlEnumerable, Typecast, ReentrancyGuard {
+contract BridgeV3 is IBridgeV3, AccessControlEnumerable, ReentrancyGuard {
     
     using Address for address;
     using Bls for Bls.Epoch;
@@ -25,40 +25,42 @@ contract BridgeV2 is IBridgeV2, AccessControlEnumerable, Typecast, ReentrancyGua
     /// @dev operator role id
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
 
+    /// @dev receiver that store thresholds
+    address public receiver;
+    /// @dev priceOracle that store prices for execution
+    address public priceOracle;
     /// @dev human readable version
     string public version;
+    /// @dev human readable tag
+    string public tag;
     /// @dev current state Active\Inactive
     State public state;
-    /// @dev nonces
-    mapping(address => uint256) public nonces;
-    /// @dev received request IDs against relay
-    RequestIdChecker public currentRequestIdChecker;
-    /// @dev received request IDs against relay
-    RequestIdChecker public previousRequestIdChecker;
+    /// @dev received request IDs 
+    mapping(bytes32 => bool) public requestIdChecker;
     // current epoch
     Bls.Epoch internal currentEpoch;
     // previous epoch
     Bls.Epoch internal previousEpoch;
 
     event EpochUpdated(bytes key, uint32 epochNum, uint64 protocolVersion);
-
     event RequestSent(
         bytes32 requestId,
         bytes data,
         address to,
         uint64 chainIdTo
     );
-
-    event RequestReceived(bytes32 requestId, string error);
-
     event StateSet(State state);
+    event ReceiverSet(address receiver);
+    event PriceOracleSet(address priceOracle);
+    event ValueWithdrawn(address to, uint256 amount);
+    event GasPaid(bytes32 requestId, uint32 gasAmount);
 
-    constructor() {
+
+    constructor(string memory tag_) {
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
         version = "2.2.3";
-        currentRequestIdChecker = new RequestIdChecker();
-        previousRequestIdChecker = new RequestIdChecker();
         state = State.Inactive;
+        tag = tag_;
     }
 
     /**
@@ -118,38 +120,72 @@ contract BridgeV2 is IBridgeV2, AccessControlEnumerable, Typecast, ReentrancyGua
     }
 
     /**
-     * @dev Send crosschain request v2.
+     * @dev Send crosschain request v3.
      *
      * @param params struct with requestId, data, receiver and opposite cahinId
-     * @param from sender's address
-     * @param nonce sender's nonce
+     * @param sender address to where send params
+     * @param nonce unique nonce for send
+     * @param options additional params for send
      */
-    function sendV2(
+    function sendV3(
         SendParams calldata params,
-        address from,
-        uint256 nonce
-    ) external override onlyRole(GATEKEEPER_ROLE) returns (bool) {
+        address sender,
+        uint256 nonce,
+        bytes memory options
+    ) external payable onlyRole(GATEKEEPER_ROLE) {
         require(state == State.Active, "Bridge: state inactive");
         require(previousEpoch.isSet() || currentEpoch.isSet(), "Bridge: epoch not set");
-    
-        verifyAndUpdateNonce(from, nonce);
+
+        address to = address(uint160(uint256(params.to)));
 
         emit RequestSent(
             params.requestId,
             params.data,
-            params.to,
-            uint64(params.chainIdTo)
+            to,
+            params.chainIdTo
         );
-
-        return true;
+        emit GasPaid(params.requestId, abi.decode(options, (uint32)));
     }
 
     /**
-     * @dev Receive (batch) crosschain request v2.
+     * @dev Estimate crosschain request v3.
+     *
+     * @param params struct with requestId, data, receiver and opposite cahinId
+     * @param sender address to where send params
+     * @param options additional params for send
+     */
+    function estimateGasFee(
+        SendParams calldata params,
+        address sender,
+        bytes memory options
+    ) public view returns (uint256) {
+        uint32 gasExecute = abi.decode(options, (uint32));
+        (uint256 fee,) = IOracle(priceOracle).estimateFeeByChain(
+            params.chainIdTo, 
+            params.data.length, 
+            gasExecute
+        );
+        return fee;
+    }
+
+    /**
+     * @dev Withdraw value from this contract.
+     *
+     * @param value_ Amount of value
+     */
+    function withdrawValue(uint256 value_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        (bool success, ) = msg.sender.call{value: value_}("");
+        require(success, "BridgeV3: failed to send Ether");
+        emit ValueWithdrawn(msg.sender, value_);
+    }
+
+    /**
+     * @dev Receive crosschain request v3.
      *
      * @param params array with ReceiveParams structs.
      */
-    function receiveV2(ReceiveParams[] calldata params) external override onlyRole(VALIDATOR_ROLE) nonReentrant returns (bool) {
+    function receiveV3(ReceiveParams[] calldata params) external override onlyRole(VALIDATOR_ROLE) nonReentrant returns (bool) {
+        
         require(state != State.Inactive, "Bridge: state inactive");
 
         for (uint256 i = 0; i < params.length; ++i) {
@@ -173,30 +209,25 @@ contract BridgeV2 is IBridgeV2, AccessControlEnumerable, Typecast, ReentrancyGua
             (bytes32 requestId, bytes memory receivedData, address to, uint64 chainIdTo) = Block.decodeRequest(payload);
             require(chainIdTo == block.chainid, "Bridge: wrong chain id");
 
-            require(to.isContract(), "Bridge: receiver is not a contract");
+            require(requestIdChecker[requestId] == false, "Bridge: request id already seen");
+            requestIdChecker[requestId] = true;
 
-            bool isRequestIdUniq;
-            if (epochHash == currentEpoch.epochHash) {
-                isRequestIdUniq = currentRequestIdChecker.check(requestId);
-            } else {
-                isRequestIdUniq = previousRequestIdChecker.check(requestId);
+            uint256 length = receivedData.length - 1;
+            payload = new bytes(length);
+            for (uint j; j < length; ++j) {
+                payload[j] = receivedData[j];
             }
-
-            string memory err;
-            
-            if (isRequestIdUniq) {
-                (bytes memory data, bytes memory check) = abi.decode(receivedData, (bytes, bytes));
-                bytes memory result = to.functionCall(check);
-                require(abi.decode(result, (bool)), "Bridge: check failed");
-                
-                to.functionCall(data, "Bridge: receive failed");
+            if (receivedData[receivedData.length - 1] == 0x01){
+                require(payload.length == 128, "Bridge: Invalid message length");
+                (bytes32 payload_, bytes32 sender, uint256 chainIdFrom, ) = abi.decode(receivedData, (bytes32, bytes32, uint256, bytes32));
+                IReceiver(receiver).receiveHash(sender, uint64(chainIdFrom), payload_, requestId);
+            } else if (receivedData[receivedData.length - 1] == 0x00) {
+                (bytes memory payload_, bytes32 sender, uint256 chainIdFrom, ) = abi.decode(receivedData, (bytes, bytes32, uint256, bytes32));
+                IReceiver(receiver).receiveData(sender, uint64(chainIdFrom), payload_, requestId);
             } else {
-                revert("Bridge: request id already seen");
+                revert("Bridge: wrong message");
             }
-
-            emit RequestReceived(requestId, err);
         }
-
         return true;
     }
 
@@ -210,6 +241,32 @@ contract BridgeV2 is IBridgeV2, AccessControlEnumerable, Typecast, ReentrancyGua
     function setState(State state_) external onlyRole(OPERATOR_ROLE) {
         state = state_;
         emit StateSet(state);
+    }
+
+    /**
+     * @dev Set new receiver.
+     *
+     * Controlled by operator.
+     *
+     * @param receiver_ Receiver address
+     */
+    function setReceiver(address receiver_) external onlyRole(OPERATOR_ROLE) {
+        require(receiver_ != address(0), "BridgeV3: zero address");
+        receiver = receiver_;
+        emit ReceiverSet(receiver_);
+    }
+
+    /**
+     * @dev Set new price oracle.
+     *
+     * Controlled by operator.
+     *
+     * @param priceOracle_ GasPriceOracle address
+     */
+    function setPriceOracle(address priceOracle_) external onlyRole(OPERATOR_ROLE) {
+        require(priceOracle_ != address(0), "BridgeV3: zero address");
+        priceOracle = priceOracle_;
+        emit PriceOracleSet(priceOracle_);
     }
 
     /**
@@ -229,25 +286,12 @@ contract BridgeV2 is IBridgeV2, AccessControlEnumerable, Typecast, ReentrancyGua
     }
 
     /**
-     * @dev Verifies and updates the sender's nonce.
-     *
-     * @param from sender's address
-     * @param nonce provided nonce
-     */
-    function verifyAndUpdateNonce(address from, uint256 nonce) internal {
-        require(nonces[from]++ == nonce, "Bridge: nonce mismatch");
-    }
-
-    /**
      * @dev Moves current epoch and current request filter to previous.
      */
     function rotateEpoch() internal {
         previousEpoch = currentEpoch;
         Bls.Epoch memory epoch;
         currentEpoch = epoch;
-        previousRequestIdChecker.destroy();
-        previousRequestIdChecker = currentRequestIdChecker;
-        currentRequestIdChecker = new RequestIdChecker();
     }
 
     /**

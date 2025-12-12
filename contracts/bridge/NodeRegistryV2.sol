@@ -183,7 +183,11 @@ contract NodeRegistryV2 is AccessControlEnumerable {
         );
 
         if (deadline > block.timestamp) {
-            IERC20Permit(EPOA).permit(owner, address(this), nodeBalance, deadline, v, r, s);
+            try IERC20Permit(EPOA).permit(owner, address(this), nodeBalance, deadline, v, r, s) {
+
+            } catch {
+                
+            }
         }
         IERC20(EPOA).safeTransferFrom(owner, address(this), nodeBalance);
     }

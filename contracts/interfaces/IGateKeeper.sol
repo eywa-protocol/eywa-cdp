@@ -1,25 +1,30 @@
 // SPDX-License-Identifier: UNLICENSED
-// Copyright (c) Eywa.Fi, 2021-2023 - all rights reserved
-pragma solidity 0.8.17;
-
+// Copyright (c) Eywa.Fi, 2021-2025 - all rights reserved
+pragma solidity ^0.8.20;
 
 interface IGateKeeper {
 
-    function calculateCost(
-        address payToken,
-        uint256 dataLength,
-        uint64 chainIdTo,
-        address sender
-    ) external returns (uint256 amountToPay);
-
     function sendData(
         bytes calldata data,
-        address to,
+        bytes32 to,
         uint64 chainIdTo,
-        address payToken
-    ) external payable;
+        bytes[] memory options
+    ) external returns(uint256);
 
-    function getNonce() external view returns (uint256);
+    function estimateGasFee(
+        bytes calldata data,
+        bytes32 to,
+        uint64 chainIdTo,
+        bytes[] memory options
+    ) external view returns(uint256, uint256);
 
-    function bridge() external view returns (address);
+    function calculateAdditionalFee(
+        uint256 dataLength,
+        uint64 chainIdTo,
+        address bridge,
+        uint256 discountPersentage
+    ) external view returns (uint256 amountToPay);
+
+    function treasuries(address protocol) external view returns (address treasury);
+    function bridge() external view returns(address);
 }

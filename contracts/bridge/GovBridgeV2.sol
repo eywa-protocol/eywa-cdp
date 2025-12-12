@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: UNLICENSED
-// Copyright (c) Eywa.Fi, 2021-2023 - all rights reserved
+// Copyright (c) Eywa.Fi, 2021-2025 - all rights reserved
 pragma solidity ^0.8.17;
 
-import "./BridgeV2.sol";
+import "./BridgeV3.sol";
 
 
-contract GovBridgeV2 is BridgeV2 {
+contract GovBridgeV2 is BridgeV3 {
 
     /// @dev current protocol version
     uint64 public protocolVersion;
@@ -28,7 +28,7 @@ contract GovBridgeV2 is BridgeV2 {
     event EpochMinDurationSet(uint256 epochMinDuration);
     event EpochMinRequestUpdateDurationSet(uint256 epochMinRequestUpdateDuration);
 
-    constructor() {
+    constructor(string memory tag_) BridgeV3(tag_) {
         protocolVersion = 1;
         nextProtocolVersion = 1;
         epochMinDuration = 2 hours;

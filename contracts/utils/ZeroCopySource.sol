@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.17;
+pragma solidity ^0.8.20;
+
 
 /**
  * @dev Wrappers over decoding and deserialization operation from bytes into bassic types in Solidity for PolyNetwork cross chain utility.
@@ -22,9 +23,9 @@ library ZeroCopySource {
      *  @return              The the read boolean value and new offset
      */
     function NextBool(bytes memory buff, uint256 offset) internal pure returns (bool, uint256) {
-        require(offset + 1 <= buff.length && offset < offset + 1, "Offset exceeds limit");
+        require(offset + 1 <= buff.length, "Offset exceeds limit");
         // byte === bytes1
-        uint8 v;
+        bytes1 v;
         assembly {
             v := mload(add(add(buff, 0x20), offset))
         }
@@ -131,6 +132,7 @@ library ZeroCopySource {
         return (v, offset + 8);
     }
 
+
     /* @notice              Read next 32 bytes as uint256 type starting from offset,
                             there are limits considering the numerical limits in multi-chain
     *  @param buff          Source bytes array
@@ -177,7 +179,6 @@ library ZeroCopySource {
                 // Get a location of some free memory and store it in tempBytes as
                 // Solidity does for memory variables.
                 tempBytes := mload(0x40)
-
                 // The first word of the slice result is potentially a partial
                 // word read from the original array. To read it, we calculate
                 // the length of that partial word and start copying that many
@@ -215,7 +216,7 @@ library ZeroCopySource {
             //if we want a zero-length slice let's just return a zero-length array
             default {
                 tempBytes := mload(0x40)
-
+                mstore(tempBytes, 0)
                 mstore(0x40, add(tempBytes, 0x20))
             }
         }
