@@ -4,7 +4,7 @@
   "description": "Eywa smart-contracts",
   "main": "index.js",
   "scripts": {},
-  "author": "DigiU team",
+  "author": "Eywa Team",
   "license": "MIT",
   "devDependencies": {
     "hardhat": "^2.18.2"
