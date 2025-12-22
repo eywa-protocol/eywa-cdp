@@ -1,22 +1,78 @@
-(c) Eywa.Fi, 2022
+(c) Eywa.Fi, CrossCurve Corp, 2022-2025 - ALL RIGHTS RESERVED.
+
+NOTICE - NO LICENSE GRANTED, INFORMATIONAL USE ONLY
+
+By accessing, viewing, cloning, downloading, forking, copying, compiling, deploying,
+running, interacting with, or otherwise using any part of this GitHub repository 
+(the «Repository»), you acknowledge and agree that the Repository is provided 
+strictly for informational and evaluation purposes and that no rights are granted 
+except as expressly stated below.
 
 Except as otherwise provided in the header of a specific source code file in 
 this repository: (a) all intellectual property (including all source code, 
 designs and protocols) contained in this repository has been published for 
-informational purposes only; (b) no license, right of reproduction or 
-distribution or other right with respect thereto is granted or implied; and 
-(c) all moral, intellectual property and other rights are hereby reserved by 
-the copyright holder.
+informational purposes only; (b) no license, right of reproduction or distribution 
+or other right with respect thereto is granted or implied; and (c) all moral, 
+intellectual property and other rights are hereby reserved by the copyright holder.
 
-THE SOFTWARE AND INTELLECTUAL PROPERTY INCLUDED IN THIS REPOSITORY IS PROVIDED 
-BY THE COPYRIGHT HOLDERS "AS IS," AND ANY EXPRESS OR IMPLIED WARRANTIES, 
-INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND 
-FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE 
-COPYRIGHT HOLDER BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, 
-EXEMPLARY, OR CONSEQUENTIAL DAMAGES ARISING IN ANY WAY OUT OF THE USE OF THIS 
-SOFTWARE OR INTELLECTUAL PROPERTY (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT 
-OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
-INTERRUPTION), HOWEVER CAUSED OR CLAIMED (WHETHER IN CONTRACT, STRICT 
-LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)), EVEN IF SUCH DAMAGES 
-WERE REASONABLY FORESEEABLE  OR THE COPYRIGHT HOLDERS WERE ADVISED OF THE 
-POSSIBILITY OF SUCH DAMAGE.
+For avoidance of doubt:
+1) «Repository Materials» include (without limitation) all source code 
+(including smart contracts), build scripts, interfaces, ABIs, documentation, 
+diagrams, specifications, designs, protocols, models, and any other content 
+in the Repository.
+2) No license or other rights are granted under any copyright, trade secret, 
+database right, mask work right, patent right, trademark, or any other intellectual 
+property right. No rights arise by implication, estoppel, exhaustion, or otherwise.
+3) Nothing in the Repository grants (a) any patent license (express or implied) or 
+(b) any right to use any Eywa/FI/Eywa.Fi names, logos, or other trademarks, trade 
+names, domain names, or branding (all of which are expressly reserved).
+4) Prohibited acts (non-exhaustive). Without a separate written license signed by 
+the copyright holder, you may not (and you may not permit any third party to):
+copy, reproduce, download, scrape, mirror, archive, or otherwise duplicate the 
+Repository Materials;
+fork, clone, or otherwise create derivative works based on the Repository Materials;
+compile, deploy, publish, distribute, or run any smart contracts or other code from 
+the Repository Materials on any network (including any testnet or mainnet);
+operate, offer, host, or provide any product or service that is based on or 
+incorporates the Repository Materials (including «as-a-service» offerings);
+use the Repository Materials for any production, commercial, or revenue-generating 
+purpose;
+remove, alter, or obscure any proprietary notices, copyright notices, or legends.
+5) If (and only if) a specific source code file contains an express license notice 
+in its header («Per-File License»), that Per-File License applies solely to that 
+specific file and solely to the extent explicitly stated in that header. No 
+Per-File License grants any rights in any other file, in the Repository as a whole, 
+or in any Eywa protocols, deployments, interfaces, documentation, or related 
+materials. In case of any ambiguity, this «NO LICENSE GRANTED» notice controls.
+6) Any unauthorized use may constitute infringement and may be pursued to the fullest 
+extent permitted by law. Failure to enforce any provision is not a waiver.
+
+THE SOFTWARE AND INTELLECTUAL PROPERTY INCLUDED IN THIS REPOSITORY IS PROVIDED BY 
+THE COPYRIGHT HOLDERS "AS IS," AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, 
+BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR 
+A PARTICULAR PURPOSE ARE DISCLAIMED.
+
+WITHOUT LIMITING THE FOREGOING, THE REPOSITORY MATERIALS HAVE NOT NECESSARILY BEEN 
+AUDITED, TESTED, OR VERIFIED; MAY CONTAIN VULNERABILITIES, ERRORS, OR SECURITY 
+ISSUES; AND ARE NOT INTENDED FOR PRODUCTION USE OR DEPLOYMENT. YOU ASSUME ALL RISKS 
+ARISING FROM ANY ACCESS TO OR USE OF THE REPOSITORY MATERIALS.
+
+IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY DIRECT, INDIRECT, 
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES ARISING IN ANY WAY OUT OF 
+THE USE OF THIS SOFTWARE OR INTELLECTUAL PROPERTY (INCLUDING, BUT NOT LIMITED TO, 
+PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR 
+BUSINESS INTERRUPTION), HOWEVER CAUSED OR CLAIMED (WHETHER IN CONTRACT, STRICT 
+LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)), EVEN IF SUCH DAMAGES WERE 
+REASONABLY FORESEEABLE OR THE COPYRIGHT HOLDERS WERE ADVISED OF THE POSSIBILITY 
+OF SUCH DAMAGE.
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, (A) THIS LIMITATION APPLIES 
+REGARDLESS OF WHETHER A PERSON IS AN AUTHORIZED LICENSEE, UNAUTHORIZED USER, 
+OR OTHERWISE, AND (B) IN NO EVENT WILL THE TOTAL AGGREGATE LIABILITY OF 
+THE COPYRIGHT HOLDER EXCEED USD $100.
+
+NOTHING IN THIS NOTICE CONSTITUTES INVESTMENT ADVICE, LEGAL ADVICE, OR AN OFFER 
+TO SELL OR THE SOLICITATION OF AN OFFER TO BUY ANY TOKENS OR OTHER ASSETS.
+
+SEVERABILITY. If any provision is held invalid or unenforceable, the remaining 
+provisions will remain in full force and effect.
